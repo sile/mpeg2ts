@@ -1,0 +1,8 @@
+[package]
+name = "mpeg2ts"
+version = "0.1.0"
+authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+
+[dependencies]
+byteorder = "1"
+trackable = "0.2"
