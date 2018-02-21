@@ -60,8 +60,10 @@ impl Pmt {
 
 #[derive(Debug)]
 pub struct EsInfoEntry {
+    // TODO: enum
     pub stream_type: u8,
     pub elementary_pid: u16,
+    pub descriptors: Vec<Descriptor>,
 }
 impl EsInfoEntry {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
@@ -90,11 +92,35 @@ impl EsInfoEntry {
             "Unexpected ES info length unused bits"
         );
         let es_info_len = n & 0b0000_0011_1111_1111;
-        track_assert_eq!(es_info_len, 0, ErrorKind::Unsupported);
+
+        let mut reader = reader.take(u64::from(es_info_len));
+        let mut descriptors = Vec::new();
+        while reader.limit() > 0 {
+            let d = track!(Descriptor::read_from(&mut reader))?;
+            descriptors.push(d);
+        }
+        track_assert_eq!(reader.limit(), 0, ErrorKind::InvalidInput);
 
         Ok(EsInfoEntry {
             stream_type,
             elementary_pid,
+            descriptors,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct Descriptor {
+    // TODO: enum
+    pub tag: u8,
+    pub data: Vec<u8>,
+}
+impl Descriptor {
+    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+        let tag = track_io!(reader.read_u8())?;
+        let len = track_io!(reader.read_u8())?;
+        let mut data = vec![0; len as usize];
+        track_io!(reader.read_exact(&mut data))?;
+        Ok(Descriptor { tag, data })
     }
 }
