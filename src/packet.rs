@@ -149,6 +149,19 @@ pub struct AdaptationField {
 impl AdaptationField {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let adaptation_field_len = track_io!(reader.read_u8())?;
+        if adaptation_field_len == 0 {
+            // TODO:
+            return Ok(AdaptationField {
+                discontinuity_indicator: false,
+                random_access_indicator: false,
+                es_priority_indicator: false,
+                pcr: None,
+                opcr: None,
+                splice_countdown: None,
+                transport_private_data: Vec::new(),
+                adaptation_extension: None,
+            });
+        }
         let mut reader = reader.take(u64::from(adaptation_field_len));
 
         let flag = track_io!(reader.read_u8())?;
