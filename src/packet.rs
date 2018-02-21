@@ -9,6 +9,7 @@ use null::Null;
 use pat::Pat;
 use pes::Pes;
 use pmt::Pmt;
+use time::ProgramClockReference;
 use util;
 
 const PACKET_LEN: u64 = 188;
@@ -132,8 +133,8 @@ pub struct AdaptationField {
     pub discontinuity_indicator: bool,
     pub random_access_indicator: bool,
     pub es_priority_indicator: bool,
-    pub pcr: Option<u64>,
-    pub opcr: Option<u64>,
+    pub pcr: Option<ProgramClockReference>,
+    pub opcr: Option<ProgramClockReference>,
     pub splice_countdown: Option<u8>,
     pub transport_private_data: Vec<u8>,
     pub adaptation_extension: Option<AdaptationExtension>,
@@ -154,12 +155,12 @@ impl AdaptationField {
         let adaptation_extension_flag = (flag & 0b0000_0001) != 0;
 
         let pcr = if pcr_flag {
-            Some(track_io!(reader.read_uint::<BigEndian>(6))?)
+            Some(track!(ProgramClockReference::read_from(&mut reader))?)
         } else {
             None
         };
         let opcr = if opcr_flag {
-            Some(track_io!(reader.read_uint::<BigEndian>(6))?)
+            Some(track!(ProgramClockReference::read_from(&mut reader))?)
         } else {
             None
         };

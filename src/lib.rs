@@ -1,4 +1,5 @@
 extern crate byteorder;
+extern crate num_rational;
 #[macro_use]
 extern crate trackable;
 
@@ -19,6 +20,7 @@ pub mod pat;
 pub mod pes;
 pub mod pmt;
 pub mod psi;
+pub mod time;
 
 mod error;
 mod util;

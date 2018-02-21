@@ -3,6 +3,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
 use packet::Data;
+use time::Timestamp;
 use util;
 
 /// Packetized elementary stream.
@@ -30,8 +31,8 @@ pub struct PesHeader {
     pub data_alignment_indicator: bool,
     pub copyright: bool,
     pub original_or_copy: bool,
-    pub pts: Option<u64>,
-    pub dts: Option<u64>,
+    pub pts: Option<Timestamp>,
+    pub dts: Option<Timestamp>,
     pub escr: Option<u64>,
     pub es_rate: Option<u32>,
     pub dsm_trick_mode: Option<u8>,
@@ -76,12 +77,14 @@ impl PesHeader {
 
         let mut reader = reader.take(u64::from(pes_header_len));
         let pts = if pts_flag {
-            Some(track_io!(reader.read_uint::<BigEndian>(5))?)
+            let check_bits = if dts_flag { 3 } else { 2 };
+            Some(track!(Timestamp::read_from(&mut reader, check_bits))?)
         } else {
             None
         };
         let dts = if dts_flag {
-            Some(track_io!(reader.read_uint::<BigEndian>(5))?)
+            let check_bits = 1;
+            Some(track!(Timestamp::read_from(&mut reader, check_bits))?)
         } else {
             None
         };
