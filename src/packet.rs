@@ -1,10 +1,13 @@
 use std::collections::HashSet;
+use std::fmt;
 use std::io::Read;
+use std::ops::Deref;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
 use null::Null;
 use pat::Pat;
+use pes::Pes;
 use pmt::Pmt;
 use util;
 
@@ -17,8 +20,39 @@ pub type Pid = u16;
 pub enum Payload {
     Pat(Pat),
     Pmt(Pmt),
+    Pes(Pes),
     Null(Null),
+    Data(Data), // TODO
     Todo(Vec<u8>),
+}
+
+pub struct Data {
+    buf: [u8; 188],
+    len: usize,
+}
+impl Data {
+    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+        // TODO: read_to_end
+        let mut buf = [0; 188];
+        let len = track_io!(reader.read(&mut buf))?;
+        Ok(Data { buf, len })
+    }
+}
+impl Deref for Data {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.buf[..self.len]
+    }
+}
+impl AsRef<[u8]> for Data {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+impl fmt::Debug for Data {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Data({:?})", self.deref())
+    }
 }
 
 #[derive(Debug)]
@@ -65,7 +99,13 @@ impl<R: Read> PacketReader<R> {
                 }
                 Some(Payload::Pmt(pmt))
             } else if self.es_pids.contains(&header.pid) {
-                unimplemented!("{:?}", header);
+                if header.payload_unit_start_indicator {
+                    let pes = track!(Pes::read_from(&mut reader))?;
+                    Some(Payload::Pes(pes))
+                } else {
+                    let data = track!(Data::read_from(&mut reader))?;
+                    Some(Payload::Data(data))
+                }
             } else if header.pid == Null::PID {
                 let null = track!(Null::read_from(&mut reader))?;
                 Some(Payload::Null(null))

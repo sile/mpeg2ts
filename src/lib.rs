@@ -16,6 +16,7 @@ macro_rules! track_io {
 pub mod null;
 pub mod packet;
 pub mod pat;
+pub mod pes;
 pub mod pmt;
 pub mod psi;
 
