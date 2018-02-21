@@ -7,3 +7,6 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 byteorder = "1"
 num-rational = "0.1"
 trackable = "0.2"
+
+[dev-dependencies]
+clap = "2"
