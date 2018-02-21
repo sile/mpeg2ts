@@ -9,7 +9,7 @@ use {ErrorKind, Result};
 pub struct Timestamp(u32);
 impl Timestamp {
     /// 90 kHz.
-    pub const RESOLUTION: u32 = 90000;
+    pub const RESOLUTION: u32 = 90_000;
 
     pub fn read_from<R: Read>(mut reader: R, check_bits: u8) -> Result<Self> {
         let n0 = track_io!(reader.read_u8())?;
@@ -47,8 +47,8 @@ impl Timestamp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ProgramClockReference(u64);
 impl ProgramClockReference {
-    /// 27kHz.
-    pub const RESOLUTION: u64 = 27000;
+    /// 27MHz.
+    pub const RESOLUTION: u64 = 27_000_000;
 
     pub const MAX: u64 = ((1 << 33) - 1) * 300 + 0b1_1111_1111;
 

@@ -34,9 +34,16 @@ pub struct Data {
 impl Data {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         // TODO: read_to_end
+        let mut offset = 0;
         let mut buf = [0; 188];
-        let len = track_io!(reader.read(&mut buf))?;
-        Ok(Data { buf, len })
+        loop {
+            let read_size = track_io!(reader.read(&mut buf[offset..]))?;
+            if read_size == 0 {
+                break;
+            }
+            offset += read_size;
+        }
+        Ok(Data { buf, len: offset })
     }
 }
 impl Deref for Data {

@@ -27,7 +27,13 @@ fn main() {
         "es" => {
             let mut reader = EsFrameReader::new(PacketReader::new(std::io::stdin()));
             while let Some(frame) = track_try_unwrap!(reader.read_es_frame()) {
-                println!("{:?}", frame);
+                println!(
+                    "stream_id={:?}, pts={:?}, dts={:?}, data.len={}",
+                    frame.stream_id,
+                    frame.pts,
+                    frame.dts,
+                    frame.data.len()
+                );
             }
         }
         _ => unreachable!(),
