@@ -10,6 +10,7 @@ derive_traits_for_trackable_error_newtype!(Error, ErrorKind);
 #[allow(missing_docs)]
 pub enum ErrorKind {
     InvalidInput,
+    Unsupported,
     Other,
 }
 impl TrackableErrorKind for ErrorKind {}

@@ -2,11 +2,34 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use psi::Psi;
+use util;
 
 const PACKET_LEN: u64 = 188;
 const SYNC_BYTE: u8 = 0x47;
 
-// const PID_PAT: u8 = 0;
+const PID_PAT: u16 = 0;
+const TABLE_ID_PAT: u8 = 0;
+
+#[derive(Debug)]
+pub struct Pat {}
+impl Pat {
+    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+        let psi = track!(Psi::read_from(reader))?;
+        track_assert_eq!(psi.tables.len(), 1, ErrorKind::InvalidInput);
+
+        let table = &psi.tables[0];
+        track_assert_eq!(table.header.table_id, TABLE_ID_PAT, ErrorKind::InvalidInput);
+
+        panic!("{:?}", psi);
+    }
+}
+
+#[derive(Debug)]
+pub enum Payload {
+    Pat(Pat),
+    Todo(Vec<u8>),
+}
 
 #[derive(Debug)]
 pub struct PacketReader<R> {
@@ -32,16 +55,24 @@ impl<R: Read> PacketReader<R> {
         } else {
             None
         };
-        if adaptation_field_control.has_payload() {
-            // TODO:
-            let mut buf = vec![0; reader.limit() as usize];
-            track_io!(reader.read_exact(&mut buf))?;
-        }
+        let payload = if adaptation_field_control.has_payload() {
+            match header.pid {
+                PID_PAT => track!(Pat::read_from(&mut reader).map(Payload::Pat).map(Some))?,
+                _ => {
+                    let mut buf = vec![0; reader.limit() as usize];
+                    track_io!(reader.read_exact(&mut buf))?;
+                    Some(Payload::Todo(buf))
+                }
+            }
+        } else {
+            None
+        };
 
         track_assert_eq!(reader.limit(), 0, ErrorKind::InvalidInput);
         Ok(Some(Packet {
             header,
             adaptation_field,
+            payload,
         }))
     }
 }
@@ -100,11 +131,8 @@ impl AdaptationField {
         } else {
             None
         };
+        track!(util::consume_stuffing_bytes(reader))?;
 
-        while reader.limit() != 0 {
-            let stuffing_byte = track_io!(reader.read_u8())?;
-            track_assert_eq!(stuffing_byte, 0xFF, ErrorKind::InvalidInput);
-        }
         Ok(AdaptationField {
             discontinuity_indicator,
             random_access_indicator,
@@ -184,6 +212,7 @@ pub struct SeamlessSplice {
 pub struct Packet {
     pub header: PacketHeader,
     pub adaptation_field: Option<AdaptationField>,
+    pub payload: Option<Payload>,
 }
 
 #[derive(Debug)]
