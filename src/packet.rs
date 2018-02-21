@@ -1,26 +1,35 @@
+use std::collections::HashSet;
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
 use pat::Pat;
+use pmt::Pmt;
 use util;
 
 const PACKET_LEN: u64 = 188;
 const SYNC_BYTE: u8 = 0x47;
 
+pub type Pid = u16;
+
 #[derive(Debug)]
 pub enum Payload {
     Pat(Pat),
+    Pmt(Pmt),
     Todo(Vec<u8>),
 }
 
 #[derive(Debug)]
 pub struct PacketReader<R> {
     stream: R,
+    pmt_pids: HashSet<Pid>,
 }
 impl<R: Read> PacketReader<R> {
     pub fn new(stream: R) -> Self {
-        PacketReader { stream }
+        PacketReader {
+            stream,
+            pmt_pids: HashSet::new(),
+        }
     }
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
         let mut reader = self.stream.by_ref().take(PACKET_LEN);
@@ -39,13 +48,19 @@ impl<R: Read> PacketReader<R> {
             None
         };
         let payload = if adaptation_field_control.has_payload() {
-            match header.pid {
-                Pat::PID => track!(Pat::read_from(&mut reader).map(Payload::Pat).map(Some))?,
-                _ => {
-                    let mut buf = vec![0; reader.limit() as usize];
-                    track_io!(reader.read_exact(&mut buf))?;
-                    Some(Payload::Todo(buf))
+            if header.pid == Pat::PID {
+                let pat = track!(Pat::read_from(&mut reader))?;
+                for e in &pat.entries {
+                    self.pmt_pids.insert(e.program_map_pid);
                 }
+                Some(Payload::Pat(pat))
+            } else if self.pmt_pids.contains(&header.pid) {
+                let pmt = track!(Pmt::read_from(&mut reader))?;
+                Some(Payload::Pmt(pmt))
+            } else {
+                let mut buf = vec![0; reader.limit() as usize];
+                track_io!(reader.read_exact(&mut buf))?;
+                Some(Payload::Todo(buf))
             }
         } else {
             None
