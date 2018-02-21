@@ -6,10 +6,12 @@ use {ErrorKind, Result};
 
 // Timestamp for PTS/DTS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Timestamp(u32);
+pub struct Timestamp(u64);
 impl Timestamp {
     /// 90 kHz.
-    pub const RESOLUTION: u32 = 90_000;
+    pub const RESOLUTION: u64 = 90_000;
+
+    pub const MAX: u64 = (1 << 33) - 1;
 
     pub fn read_from<R: Read>(mut reader: R, check_bits: u8) -> Result<Self> {
         let n0 = track_io!(reader.read_u8())?;
@@ -28,18 +30,30 @@ impl Timestamp {
         track_assert_eq!(n1 & 1, 1, ErrorKind::InvalidInput, "Unexpected marker bit");
         track_assert_eq!(n2 & 1, 1, ErrorKind::InvalidInput, "Unexpected marker bit");
 
-        let t = u32::from((n0 & 0b0000_1110) >> 1) | u32::from(n1 >> 1) | u32::from(n2 >> 1);
+        let t = (u64::from((n0 & 0b0000_1110) >> 1) << 30) | (u64::from(n1 >> 1) << 15)
+            | u64::from(n2 >> 1);
         Ok(Timestamp(t))
     }
 
-    pub fn new(n: u32) -> Self {
-        Timestamp(n)
+    pub fn new(n: u64) -> Result<Self> {
+        track_assert!(
+            n <= Self::MAX,
+            ErrorKind::InvalidInput,
+            "Too large value: {}",
+            n
+        );
+        Ok(Timestamp(n))
     }
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_u64(&self) -> u64 {
         self.0
     }
-    pub fn as_ratio(&self) -> Ratio<u32> {
+    pub fn as_ratio(&self) -> Ratio<u64> {
         Ratio::new(self.0, Self::RESOLUTION)
+    }
+}
+impl From<u32> for Timestamp {
+    fn from(n: u32) -> Self {
+        Timestamp(u64::from(n))
     }
 }
 
