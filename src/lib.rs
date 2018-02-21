@@ -13,6 +13,7 @@ macro_rules! track_io {
     }
 }
 
+pub mod null;
 pub mod packet;
 pub mod pat;
 pub mod pmt;

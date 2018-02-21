@@ -3,6 +3,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use null::Null;
 use pat::Pat;
 use pmt::Pmt;
 use util;
@@ -16,6 +17,7 @@ pub type Pid = u16;
 pub enum Payload {
     Pat(Pat),
     Pmt(Pmt),
+    Null(Null),
     Todo(Vec<u8>),
 }
 
@@ -23,12 +25,14 @@ pub enum Payload {
 pub struct PacketReader<R> {
     stream: R,
     pmt_pids: HashSet<Pid>,
+    es_pids: HashSet<Pid>,
 }
 impl<R: Read> PacketReader<R> {
     pub fn new(stream: R) -> Self {
         PacketReader {
             stream,
             pmt_pids: HashSet::new(),
+            es_pids: HashSet::new(),
         }
     }
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
@@ -56,7 +60,15 @@ impl<R: Read> PacketReader<R> {
                 Some(Payload::Pat(pat))
             } else if self.pmt_pids.contains(&header.pid) {
                 let pmt = track!(Pmt::read_from(&mut reader))?;
+                for e in &pmt.es_info_entries {
+                    self.es_pids.insert(e.elementary_pid);
+                }
                 Some(Payload::Pmt(pmt))
+            } else if self.es_pids.contains(&header.pid) {
+                unimplemented!("{:?}", header);
+            } else if header.pid == Null::PID {
+                let null = track!(Null::read_from(&mut reader))?;
+                Some(Payload::Null(null))
             } else {
                 let mut buf = vec![0; reader.limit() as usize];
                 track_io!(reader.read_exact(&mut buf))?;
