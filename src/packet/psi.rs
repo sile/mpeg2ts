@@ -2,6 +2,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use packet::VersionNumber;
 use util::{self, WithCrc32};
 
 /// Program-specific information.
@@ -98,7 +99,7 @@ impl PsiTableHeader {
 #[derive(Debug)]
 pub struct PsiTableSyntax {
     pub table_id_extension: u16,
-    pub version_number: u8,
+    pub version_number: VersionNumber,
     pub current_next_indicator: bool,
     pub section_number: u8,
     pub last_section_number: u8,
@@ -115,7 +116,7 @@ impl PsiTableSyntax {
             ErrorKind::InvalidInput,
             "Unexpected reserved bits"
         );
-        let version_number = (b & 0b0011_1110) >> 1;
+        let version_number = track!(VersionNumber::from_u8((b & 0b0011_1110) >> 1))?;
         let current_next_indicator = (b & 0b0000_0001) != 0;
 
         let section_number = track_io!(reader.read_u8())?;

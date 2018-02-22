@@ -1,6 +1,6 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::ops::Deref;
 use byteorder::{BigEndian, ReadBytesExt};
 
@@ -41,8 +41,7 @@ impl Pid {
         self.0
     }
 
-    // TODO: pub(super)
-    pub(crate) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    pub(super) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let n = track_io!(reader.read_u16::<BigEndian>())?;
         track_assert_eq!(
             n & 0b1110_0000_0000_0000,
@@ -117,6 +116,51 @@ impl Default for ContinuityCounter {
     }
 }
 
+/// Version number for PSI table syntax section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct VersionNumber(u8);
+impl VersionNumber {
+    /// Maximum version number.
+    pub const MAX: u8 = (1 << 5) - 1;
+
+    /// Makes a new `VersionNumber` instance that has the value `0`.
+    pub fn new() -> Self {
+        VersionNumber(0)
+    }
+
+    /// Makes a new `VersionNumber` instance with the given value.
+    ///
+    /// # Errors
+    ///
+    /// If `n` exceeds `VersionNumber::MAX`, it will return an `ErrorKind::InvalidInput` error.
+    pub fn from_u8(n: u8) -> Result<Self> {
+        track_assert!(
+            n <= Self::MAX,
+            ErrorKind::InvalidInput,
+            "Too large version number: {}",
+            n
+        );
+        Ok(VersionNumber(n))
+    }
+
+    /// Returns the value of the version number.
+    pub fn as_u8(&self) -> u8 {
+        self.0
+    }
+
+    /// Increments the version number.
+    ///
+    /// It will be wrapped around if overflow.
+    pub fn increment(&mut self) {
+        self.0 = (self.0 + 1) & Self::MAX;
+    }
+}
+impl Default for VersionNumber {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Byte sequence used to represent packet payload data.
 #[derive(Clone)]
 pub struct Bytes {
@@ -148,9 +192,7 @@ impl Bytes {
         Ok(Bytes { buf, len })
     }
 
-    // TODO: priv
-    /// Reads a `Bytes` instance from `reader`.
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    pub(super) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let mut offset = 0;
         let mut buf = [0; Self::MAX_SIZE];
         loop {
@@ -161,12 +203,6 @@ impl Bytes {
             offset += read_size;
         }
         Ok(Bytes { buf, len: offset })
-    }
-
-    // TODO: priv
-    /// Writes this `Bytes` to `writer`.
-    pub fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
-        track_io!(writer.write_all(self))
     }
 }
 impl Deref for Bytes {

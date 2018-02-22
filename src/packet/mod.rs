@@ -14,7 +14,7 @@ pub use self::pes::{Pes, PesHeader};
 pub use self::pmt::{Descriptor, EsInfo, Pmt};
 pub use self::stream_type::StreamType;
 pub use self::types::{Bytes, ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate,
-                      SeamlessSplice, TransportScramblingControl};
+                      SeamlessSplice, TransportScramblingControl, VersionNumber};
 
 use {ErrorKind, Result};
 use self::adaptation_field::AdaptationFieldControl;

@@ -33,6 +33,7 @@ pub mod es; // s/es/pes_packet/
 pub mod packet; // s/packet/ts_packet/
 pub mod time;
 
+mod crc;
 mod error;
 mod util;
 

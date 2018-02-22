@@ -2,7 +2,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::{Pid, StreamType};
+use packet::{Pid, StreamType, VersionNumber};
 use packet::psi::Psi;
 
 /// Program Map Table.
@@ -17,10 +17,10 @@ pub struct Pmt {
     /// that is derived from the program timestamp.
     pub pcr_pid: Option<Pid>,
 
+    pub version_number: VersionNumber,
     pub table: Vec<EsInfo>,
 }
 impl Pmt {
-    // TODO:
     const TABLE_ID: u8 = 2;
 
     pub(super) fn read_from<R: Read>(reader: R) -> Result<Self> {
@@ -28,14 +28,15 @@ impl Pmt {
         track_assert_eq!(psi.tables.len(), 1, ErrorKind::InvalidInput);
 
         let table = psi.tables.pop().expect("Never fails");
-        track_assert_eq!(
-            table.header.table_id,
-            Self::TABLE_ID,
-            ErrorKind::InvalidInput
-        );
-        track_assert!(!table.header.private_bit, ErrorKind::InvalidInput);
+        let header = table.header;
+        track_assert_eq!(header.table_id, Self::TABLE_ID, ErrorKind::InvalidInput);
+        track_assert!(!header.private_bit, ErrorKind::InvalidInput);
 
         let syntax = track_assert_some!(table.syntax.as_ref(), ErrorKind::InvalidInput);
+        track_assert_eq!(syntax.section_number, 0, ErrorKind::InvalidInput);
+        track_assert_eq!(syntax.last_section_number, 0, ErrorKind::InvalidInput);
+        track_assert!(syntax.current_next_indicator, ErrorKind::InvalidInput);
+
         let mut reader = &syntax.table_data[..];
 
         let pcr_pid = track!(Pid::read_from(&mut reader))?;
@@ -68,6 +69,7 @@ impl Pmt {
         Ok(Pmt {
             program_num: syntax.table_id_extension,
             pcr_pid,
+            version_number: syntax.version_number,
             table,
         })
     }

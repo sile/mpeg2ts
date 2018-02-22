@@ -2,7 +2,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::Pid;
+use packet::{Pid, VersionNumber};
 use packet::psi::Psi;
 
 /// Payload for PAT(Program Association Table) packets.
@@ -10,10 +10,10 @@ use packet::psi::Psi;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Pat {
     pub transport_stream_id: u16,
+    pub version_number: VersionNumber,
     pub table: Vec<ProgramAssociation>,
 }
 impl Pat {
-    // TODO:
     const TABLE_ID: u8 = 0;
 
     pub(super) fn read_from<R: Read>(reader: R) -> Result<Self> {
@@ -21,14 +21,14 @@ impl Pat {
         track_assert_eq!(psi.tables.len(), 1, ErrorKind::InvalidInput);
 
         let table = psi.tables.pop().expect("Never fails");
-        track_assert_eq!(
-            table.header.table_id,
-            Self::TABLE_ID,
-            ErrorKind::InvalidInput
-        );
-        track_assert!(!table.header.private_bit, ErrorKind::InvalidInput);
+        let header = table.header;
+        track_assert_eq!(header.table_id, Self::TABLE_ID, ErrorKind::InvalidInput);
+        track_assert!(!header.private_bit, ErrorKind::InvalidInput);
 
         let syntax = track_assert_some!(table.syntax.as_ref(), ErrorKind::InvalidInput);
+        track_assert_eq!(syntax.section_number, 0, ErrorKind::InvalidInput);
+        track_assert_eq!(syntax.last_section_number, 0, ErrorKind::InvalidInput);
+        track_assert!(syntax.current_next_indicator, ErrorKind::InvalidInput);
 
         let mut reader = &syntax.table_data[..];
         let mut table = Vec::new();
@@ -37,6 +37,7 @@ impl Pat {
         }
         Ok(Pat {
             transport_stream_id: syntax.table_id_extension,
+            version_number: syntax.version_number,
             table,
         })
     }
