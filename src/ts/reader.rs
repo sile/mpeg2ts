@@ -5,6 +5,14 @@ use {ErrorKind, Result};
 use ts::{AdaptationField, Pid, TsHeader, TsPacket, TsPayload};
 use ts::payload::{Bytes, Null, Pat, Pes, Pmt};
 
+/// The `ReadTsPacket` trait allows for reading TS packets from a source.
+pub trait ReadTsPacket {
+    /// Reads a TS packet.
+    ///
+    /// If the end of the stream is reached, it will return `Ok(None)`.
+    fn read_ts_packet(&mut self) -> Result<Option<TsPacket>>;
+}
+
 /// TS packet reader.
 #[derive(Debug)]
 pub struct TsPacketReader<R> {
@@ -29,11 +37,9 @@ impl<R: Read> TsPacketReader<R> {
     pub fn into_stream(self) -> R {
         self.stream
     }
-
-    /// Reads a TS packet.
-    ///
-    /// If the end of the stream is reached, it will return `Ok(None)`.
-    pub fn read_packet(&mut self) -> Result<Option<TsPacket>> {
+}
+impl<R: Read> ReadTsPacket for TsPacketReader<R> {
+    fn read_ts_packet(&mut self) -> Result<Option<TsPacket>> {
         let mut reader = self.stream.by_ref().take(TsPacket::SIZE as u64);
         let mut peek = [0; 1];
         if track_io!(reader.read(&mut peek))? == 0 {
