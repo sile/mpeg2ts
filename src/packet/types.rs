@@ -177,6 +177,26 @@ impl PartialEq for Bytes {
 }
 impl Eq for Bytes {}
 
+/// Transport scrambling control.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TransportScramblingControl {
+    NotScrambled = 0b00,
+    ScrambledWithEvenKey = 0b10,
+    ScrambledWithOddKey = 0b11,
+}
+impl TransportScramblingControl {
+    pub(super) fn from_u8(n: u8) -> Result<Self> {
+        Ok(match n {
+            0b00 => TransportScramblingControl::NotScrambled,
+            0b10 => TransportScramblingControl::ScrambledWithEvenKey,
+            0b11 => TransportScramblingControl::ScrambledWithOddKey,
+            0b01 => track_panic!(ErrorKind::InvalidInput, "Reserved for future use"),
+            _ => track_panic!(ErrorKind::InvalidInput, "Unexpected value: {}", n),
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

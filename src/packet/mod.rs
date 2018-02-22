@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
-pub use self::types::{Bytes, ContinuityCounter, Pid};
+pub use self::types::{Bytes, ContinuityCounter, Pid, TransportScramblingControl};
 
 use {ErrorKind, Result};
 use null::Null;
@@ -44,7 +44,7 @@ pub struct PacketHeader {
     pub transport_error_indicator: bool,
     pub transport_priority: bool,
     pub pid: Pid,
-    pub transport_scrambling_control: u8,
+    pub transport_scrambling_control: TransportScramblingControl,
     pub continuity_counter: ContinuityCounter,
 }
 impl PacketHeader {
@@ -59,7 +59,7 @@ impl PacketHeader {
         let pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
 
         let n = track_io!(reader.read_u8())?;
-        let transport_scrambling_control = n >> 6;
+        let transport_scrambling_control = track!(TransportScramblingControl::from_u8(n >> 6))?;
         let adaptation_field_control = match (n >> 4) & 0b11 {
             0b01 => AdaptationFieldControl::PayloadOnly,
             0b10 => AdaptationFieldControl::AdaptationFieldOnly,
