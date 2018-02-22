@@ -3,7 +3,6 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
 use es::StreamId;
-use packet::TransportScramblingControl;
 use time::{ClockReference, Timestamp};
 use util;
 
@@ -22,7 +21,6 @@ pub struct PesPacket<B> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PesHeader {
     pub stream_id: StreamId,
-    pub scrambling_control: TransportScramblingControl,
     pub priority: bool,
 
     /// `true` indicates that the PES packet header is immediately followed by
@@ -56,12 +54,12 @@ impl PesHeader {
             ErrorKind::InvalidInput,
             "Unexpected marker bits"
         );
-        let scrambling_control =
-            track!(TransportScramblingControl::from_u8((b & 0b0011_0000) >> 4))?;
+        let scrambling_control = (b & 0b0011_0000) >> 4;
         let priority = (b & 0b0000_1000) != 0;
         let data_alignment_indicator = (b & 0b0000_0100) != 0;
         let copyright = (b & 0b0000_0010) != 0;
         let original_or_copy = (b & 0b0000_0001) != 0;
+        track_assert_eq!(scrambling_control, 0, ErrorKind::Unsupported);
 
         let b = track_io!(reader.read_u8())?;
         let pts_flag = (b & 0b1000_0000) != 0;
@@ -104,7 +102,6 @@ impl PesHeader {
 
         let header = PesHeader {
             stream_id,
-            scrambling_control,
             priority,
             data_alignment_indicator,
             copyright,

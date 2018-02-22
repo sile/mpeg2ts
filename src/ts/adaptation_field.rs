@@ -2,8 +2,8 @@ use std::io::Read;
 use byteorder::ReadBytesExt;
 
 use {ErrorKind, Result};
-use packet::{LegalTimeWindow, PiecewiseRate, SeamlessSplice};
 use time::ClockReference;
+use ts::{LegalTimeWindow, PiecewiseRate, SeamlessSplice};
 use util;
 
 /// Adaptation field.

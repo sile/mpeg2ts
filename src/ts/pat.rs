@@ -2,8 +2,8 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::{Pid, VersionNumber};
-use packet::psi::Psi;
+use ts::{Pid, VersionNumber};
+use ts::psi::Psi;
 
 /// Payload for PAT(Program Association Table) packets.
 #[allow(missing_docs)]

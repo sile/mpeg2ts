@@ -5,7 +5,7 @@ use std::ops::Deref;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::Packet;
+use ts::TsPacket;
 use time::Timestamp;
 
 /// Packet Identifier.
@@ -95,7 +95,7 @@ impl ContinuityCounter {
     /// # Examples
     ///
     /// ```
-    /// use mpeg2ts::packet::ContinuityCounter;
+    /// use mpeg2ts::ts::ContinuityCounter;
     ///
     /// let mut c = ContinuityCounter::new();
     /// assert_eq!(c.as_u8(), 0);
@@ -169,7 +169,7 @@ pub struct Bytes {
 }
 impl Bytes {
     /// Maximum size of a byte sequence.
-    pub const MAX_SIZE: usize = Packet::SIZE - 4 /* the size of the sync byte and a header */;
+    pub const MAX_SIZE: usize = TsPacket::SIZE - 4 /* the size of the sync byte and a header */;
 
     /// Makes a new `Bytes` instance.
     ///
@@ -242,7 +242,7 @@ pub enum TransportScramblingControl {
     ScrambledWithOddKey = 0b11,
 }
 impl TransportScramblingControl {
-    pub(crate) fn from_u8(n: u8) -> Result<Self> {
+    pub(super) fn from_u8(n: u8) -> Result<Self> {
         Ok(match n {
             0b00 => TransportScramblingControl::NotScrambled,
             0b10 => TransportScramblingControl::ScrambledWithEvenKey,

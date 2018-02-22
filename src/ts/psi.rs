@@ -2,7 +2,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::VersionNumber;
+use ts::VersionNumber;
 use util::{self, WithCrc32};
 
 /// Program-specific information.

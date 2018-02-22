@@ -3,8 +3,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
 use es::StreamType;
-use packet::{Pid, VersionNumber};
-use packet::psi::Psi;
+use ts::{Pid, VersionNumber};
+use ts::psi::Psi;
 
 /// Program Map Table.
 #[allow(missing_docs)]

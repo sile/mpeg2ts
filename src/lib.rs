@@ -29,9 +29,9 @@ macro_rules! track_io {
 }
 
 pub mod es;
-pub mod packet; // s/packet/ts/
 pub mod pes;
 pub mod time;
+pub mod ts;
 
 mod crc;
 mod error;
