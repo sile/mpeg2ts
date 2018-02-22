@@ -2,7 +2,8 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::{Pid, StreamType, VersionNumber};
+use es::StreamType;
+use packet::{Pid, VersionNumber};
 use packet::psi::Psi;
 
 /// Program Map Table.

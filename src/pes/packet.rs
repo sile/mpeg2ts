@@ -2,8 +2,8 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use es::StreamId;
 use packet::TransportScramblingControl;
-use pes::StreamId;
 use time::{ClockReference, Timestamp};
 use util;
 

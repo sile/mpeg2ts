@@ -12,7 +12,6 @@ pub use self::null::Null;
 pub use self::pat::{Pat, ProgramAssociation};
 pub use self::pes::Pes;
 pub use self::pmt::{Descriptor, EsInfo, Pmt};
-pub use self::stream_type::StreamType;
 pub use self::types::{Bytes, ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate,
                       SeamlessSplice, TransportScramblingControl, VersionNumber};
 
@@ -25,7 +24,6 @@ mod pat;
 mod pes;
 mod pmt;
 mod psi;
-mod stream_type;
 mod types;
 
 /// Transport stream packet.

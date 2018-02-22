@@ -28,8 +28,7 @@ macro_rules! track_io {
     }
 }
 
-// #[allow(missing_docs)] // TODO
-// pub mod es; // s/es/pes_packet/
+pub mod es;
 pub mod packet; // s/packet/ts/
 pub mod pes;
 pub mod time;
