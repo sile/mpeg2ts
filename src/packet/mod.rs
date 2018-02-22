@@ -4,9 +4,7 @@
 //!
 //! - [MPEG transport stream](https://en.wikipedia.org/wiki/MPEG_transport_stream)
 use std::collections::HashSet;
-use std::fmt;
 use std::io::Read;
-use std::ops::Deref;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
@@ -17,7 +15,7 @@ use pmt::Pmt;
 use time::ProgramClockReference;
 use util;
 
-pub use self::types::Pid;
+pub use self::types::{Bytes, Pid};
 
 mod types;
 
@@ -31,7 +29,7 @@ pub struct Packet {
 }
 impl Packet {
     /// Size of a packet in bytes.
-    pub const SIZE: u8 = 188;
+    pub const SIZE: usize = 188;
 
     /// Synchronization byte.
     ///
@@ -47,45 +45,7 @@ pub enum PacketPayload {
     Pmt(Pmt),
     Pes(Pes),
     Null(Null),
-    Data(Data),    // TODO
-    Todo(Vec<u8>), // TODO
-}
-
-#[derive(Clone)]
-pub struct Data {
-    buf: [u8; 188],
-    len: usize,
-}
-impl Data {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
-        // TODO: read_to_end
-        let mut offset = 0;
-        let mut buf = [0; 188];
-        loop {
-            let read_size = track_io!(reader.read(&mut buf[offset..]))?;
-            if read_size == 0 {
-                break;
-            }
-            offset += read_size;
-        }
-        Ok(Data { buf, len: offset })
-    }
-}
-impl Deref for Data {
-    type Target = [u8];
-    fn deref(&self) -> &Self::Target {
-        &self.buf[..self.len]
-    }
-}
-impl AsRef<[u8]> for Data {
-    fn as_ref(&self) -> &[u8] {
-        self.deref()
-    }
-}
-impl fmt::Debug for Data {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Data({:?})", self.deref())
-    }
+    Raw(Bytes),
 }
 
 #[derive(Debug)]
@@ -103,7 +63,7 @@ impl<R: Read> PacketReader<R> {
         }
     }
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
-        let mut reader = self.stream.by_ref().take(u64::from(Packet::SIZE));
+        let mut reader = self.stream.by_ref().take(Packet::SIZE as u64);
 
         let mut peek_buf = [0; 1];
         if track_io!(reader.read(&mut peek_buf))? == 0 {
@@ -136,16 +96,15 @@ impl<R: Read> PacketReader<R> {
                     let pes = track!(Pes::read_from(&mut reader))?;
                     Some(PacketPayload::Pes(pes))
                 } else {
-                    let data = track!(Data::read_from(&mut reader))?;
-                    Some(PacketPayload::Data(data))
+                    let bytes = track!(Bytes::read_from(&mut reader))?;
+                    Some(PacketPayload::Raw(bytes))
                 }
             } else if header.pid == Pid::NULL {
                 let null = track!(Null::read_from(&mut reader))?;
                 Some(PacketPayload::Null(null))
             } else {
-                let mut buf = vec![0; reader.limit() as usize];
-                track_io!(reader.read_exact(&mut buf))?;
-                Some(PacketPayload::Todo(buf))
+                let bytes = track!(Bytes::read_from(&mut reader))?;
+                Some(PacketPayload::Raw(bytes))
             }
         } else {
             None

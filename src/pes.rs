@@ -2,7 +2,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::Data;
+use packet::Bytes;
 use time::Timestamp;
 use util;
 
@@ -10,12 +10,12 @@ use util;
 #[derive(Debug, Clone)]
 pub struct Pes {
     pub header: PesHeader,
-    pub data: Data,
+    pub data: Bytes,
 }
 impl Pes {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let header = track!(PesHeader::read_from(&mut reader))?;
-        let data = track!(Data::read_from(reader))?;
+        let data = track!(Bytes::read_from(reader))?;
         Ok(Pes { header, data })
     }
 }

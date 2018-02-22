@@ -72,7 +72,7 @@ impl<R: Read> EsFrameReader<R> {
                         }
                     }
                 }
-                Some(PacketPayload::Data(ref data)) => {
+                Some(PacketPayload::Raw(ref data)) => {
                     let mut frame = track_assert_some!(
                         self.es_frames.remove(&packet.header.pid),
                         ErrorKind::InvalidInput
