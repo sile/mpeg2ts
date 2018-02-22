@@ -1,3 +1,4 @@
+//! Time-related constituent elements.
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
@@ -12,26 +13,32 @@ impl Timestamp {
 
     pub const MAX: u64 = (1 << 33) - 1;
 
-    pub fn read_from<R: Read>(mut reader: R, check_bits: u8) -> Result<Self> {
-        let n0 = track_io!(reader.read_u8())?;
-        let n1 = track_io!(reader.read_u16::<BigEndian>())?;
-        let n2 = track_io!(reader.read_u16::<BigEndian>())?;
-
-        track_assert_eq!(
-            n0 >> 4,
-            check_bits,
+    pub fn from_u64(n: u64) -> Result<Self> {
+        track_assert!(
+            (n & 1) != 0,
             ErrorKind::InvalidInput,
-            "Unexpected check bits: actual={}, expected={}",
-            n0 >> 4,
-            check_bits
+            "Unexpected marker bit"
         );
-        track_assert_eq!(n0 & 1, 1, ErrorKind::InvalidInput, "Unexpected marker bit");
-        track_assert_eq!(n1 & 1, 1, ErrorKind::InvalidInput, "Unexpected marker bit");
-        track_assert_eq!(n2 & 1, 1, ErrorKind::InvalidInput, "Unexpected marker bit");
+        track_assert!(
+            ((n >> 16) & 1) != 0,
+            ErrorKind::InvalidInput,
+            "Unexpected marker bit"
+        );
+        track_assert!(
+            ((n >> 32) & 1) != 0,
+            ErrorKind::InvalidInput,
+            "Unexpected marker bit"
+        );
 
-        let t = (u64::from((n0 & 0b0000_1110) >> 1) << 30) | (u64::from(n1 >> 1) << 15)
-            | u64::from(n2 >> 1);
-        Ok(Timestamp(t))
+        let n0 = n >> (32 + 1) & ((1 << 3) - 1);
+        let n1 = n >> (16 + 1) & ((1 << 15) - 1);
+        let n2 = n >> 1 & ((1 << 15) - 1);
+        Ok(Timestamp((n0 << 30) | (n1 << 15) | n2))
+    }
+    pub fn read_from<R: Read>(mut reader: R, check_bits: u8) -> Result<Self> {
+        let n = track_io!(reader.read_uint::<BigEndian>(5))?;
+        track_assert_eq!((n >> 36) as u8, check_bits, ErrorKind::InvalidInput);
+        track!(Self::from_u64(n))
     }
 
     pub fn new(n: u64) -> Result<Self> {
