@@ -1,8 +1,9 @@
 use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::ReadBytesExt;
 
 use {ErrorKind, Result};
-use time::{ProgramClockReference, Timestamp};
+use packet::{LegalTimeWindow, PiecewiseRate, SeamlessSplice};
+use time::ClockReference;
 use util;
 
 /// Adaptation field.
@@ -19,8 +20,8 @@ pub struct AdaptationField {
     /// Set `true` when this stream should be considered "high priority".
     pub es_priority_indicator: bool,
 
-    pub pcr: Option<ProgramClockReference>,
-    pub opcr: Option<ProgramClockReference>,
+    pub pcr: Option<ClockReference>,
+    pub opcr: Option<ClockReference>,
 
     /// Indicates how many TS packets from this one a splicing point occurs.
     pub splice_countdown: Option<i8>,
@@ -47,12 +48,12 @@ impl AdaptationField {
         let extension_flag = (b & 0b0000_0001) != 0;
 
         let pcr = if pcr_flag {
-            Some(track!(ProgramClockReference::read_from(&mut reader))?)
+            Some(track!(ClockReference::read_from(&mut reader))?)
         } else {
             None
         };
         let opcr = if opcr_flag {
-            Some(track!(ProgramClockReference::read_from(&mut reader))?)
+            Some(track!(ClockReference::read_from(&mut reader))?)
         } else {
             None
         };
@@ -142,134 +143,6 @@ impl AdaptationExtensionField {
             legal_time_window,
             piecewise_rate,
             seamless_splice,
-        })
-    }
-}
-
-/// Legal time window.
-#[allow(missing_docs)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LegalTimeWindow {
-    is_valid: bool,
-    offset: u16,
-}
-impl LegalTimeWindow {
-    /// Maximum offset value.
-    pub const MAX_OFFSET: u16 = (1 << 15) - 1;
-
-    /// Makes a new `LegalTimeWindow` instance.
-    ///
-    /// # Errors
-    ///
-    /// If `offset` exceeds `LegalTimeWindow::MAX_OFFSET`, it will return an `ErrorKind::InvalidInput` error.
-    pub fn new(is_valid: bool, offset: u16) -> Result<Self> {
-        track_assert!(
-            offset <= Self::MAX_OFFSET,
-            ErrorKind::InvalidInput,
-            "Too large offset: {}",
-            offset
-        );
-        Ok(LegalTimeWindow { is_valid, offset })
-    }
-
-    /// Returns `true` if the window is valid, otherwise `false`.
-    pub fn is_valid(&self) -> bool {
-        self.is_valid
-    }
-
-    /// Returns the offset of the window.
-    pub fn offset(&self) -> u16 {
-        self.offset
-    }
-
-    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
-        let n = track_io!(reader.read_u16::<BigEndian>())?;
-        Ok(LegalTimeWindow {
-            is_valid: (n & 0b1000_0000_0000_0000) != 0,
-            offset: n & 0b0111_1111_1111_1111,
-        })
-    }
-}
-
-/// Piecewise rate.
-#[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PiecewiseRate(u32);
-impl PiecewiseRate {
-    /// Maximum rate.
-    pub const MAX: u32 = (1 << 22) - 1;
-
-    /// Makes a new `PiecewiseRate` instance.
-    ///
-    /// # Errors
-    ///
-    /// If `rate` exceeds `PiecewiseRate::MAX`, it will return an `ErrorKind::InvalidInput` error.
-    pub fn new(rate: u32) -> Result<Self> {
-        track_assert!(
-            rate <= Self::MAX,
-            ErrorKind::InvalidInput,
-            "Too large rate: {}",
-            rate
-        );
-        Ok(PiecewiseRate(rate))
-    }
-
-    /// Returns the value of the `PiecewiseRate` instance.
-    pub fn as_u32(&self) -> u32 {
-        self.0
-    }
-
-    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
-        let n = track_io!(reader.read_uint::<BigEndian>(3))? as u32;
-        Ok(PiecewiseRate(n & 0x3FFF_FFFF))
-    }
-}
-
-/// Seamless splice.
-#[allow(missing_docs)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SeamlessSplice {
-    splice_type: u8,
-    dts_next_access_unit: Timestamp,
-}
-impl SeamlessSplice {
-    /// Maximum splice type value.
-    pub const MAX_SPLICE_TYPE: u8 = (1 << 4) - 1;
-
-    /// Makes a new `SeamlessSplice` instance.
-    ///
-    /// # Errors
-    ///
-    /// If `splice_type` exceeds `SeamlessSplice::MAX_SPLICE_TYPE`,
-    /// it will return an `ErrorKind::InvalidInput` error.
-    pub fn new(splice_type: u8, dts_next_access_unit: Timestamp) -> Result<Self> {
-        track_assert!(
-            splice_type <= Self::MAX_SPLICE_TYPE,
-            ErrorKind::InvalidInput,
-            "Too large splice type: {}",
-            splice_type
-        );
-        Ok(SeamlessSplice {
-            splice_type,
-            dts_next_access_unit,
-        })
-    }
-
-    /// Returns the splice type (i.e., parameters of the H.262 splice).
-    pub fn splice_type(&self) -> u8 {
-        self.splice_type
-    }
-
-    /// Returns the PES DTS of the splice point.
-    pub fn dts_next_access_unit(&self) -> Timestamp {
-        self.dts_next_access_unit
-    }
-
-    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
-        let n = track_io!(reader.read_uint::<BigEndian>(5))?;
-        Ok(SeamlessSplice {
-            splice_type: (n >> 36) as u8,
-            dts_next_access_unit: track!(Timestamp::from_u64(n & 0x0F_FFFF_FFFF))?,
         })
     }
 }

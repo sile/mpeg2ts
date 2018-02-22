@@ -3,7 +3,7 @@ use std::io::Read;
 
 use {ErrorKind, Result};
 use packet::{PacketPayload, PacketReader, Pid};
-use time::{ProgramClockReference, Timestamp};
+use time::{Pcr, Timestamp};
 
 // TODO: name
 #[derive(Debug)]
@@ -22,17 +22,17 @@ pub struct EsFrame {
 pub struct EsFrameReader<R> {
     packet_reader: PacketReader<R>,
     es_frames: HashMap<Pid, EsFrame>,
-    pcr: ProgramClockReference,
+    pcr: Pcr,
 }
 impl<R: Read> EsFrameReader<R> {
     pub fn new(packet_reader: PacketReader<R>) -> Self {
         EsFrameReader {
             packet_reader,
             es_frames: HashMap::new(),
-            pcr: ProgramClockReference::from(0), // TODO
+            pcr: Pcr::from(0), // TODO
         }
     }
-    pub fn pcr(&self) -> ProgramClockReference {
+    pub fn pcr(&self) -> Pcr {
         self.pcr
     }
     pub fn read_es_frame(&mut self) -> Result<Option<EsFrame>> {
