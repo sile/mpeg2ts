@@ -9,18 +9,23 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 pub use self::adaptation_field::{AdaptationExtensionField, AdaptationField};
 pub use self::null::Null;
+pub use self::pat::{Pat, ProgramAssociation};
 pub use self::pes::{Pes, PesHeader};
+pub use self::pmt::{Descriptor, EsInfo, Pmt};
+pub use self::stream_type::StreamType;
 pub use self::types::{Bytes, ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate,
                       SeamlessSplice, TransportScramblingControl};
 
 use {ErrorKind, Result};
-use pat::Pat;
-use pmt::Pmt;
 use self::adaptation_field::AdaptationFieldControl;
 
 mod adaptation_field;
 mod null;
+mod pat;
 mod pes;
+mod pmt;
+mod psi;
+mod stream_type;
 mod types;
 
 /// Transport stream packet.
@@ -84,7 +89,7 @@ impl PacketHeader {
 
 /// Packet payload.
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PacketPayload {
     Pat(Pat),
     Pmt(Pmt),
@@ -141,8 +146,8 @@ impl<R: Read> PacketReader<R> {
             let payload = match header.pid {
                 Pid::PAT => {
                     let pat = track!(Pat::read_from(&mut reader))?;
-                    for e in &pat.entries {
-                        self.pids.insert(e.program_map_pid, PidKind::Pmt);
+                    for pa in &pat.table {
+                        self.pids.insert(pa.program_map_pid, PidKind::Pmt);
                     }
                     PacketPayload::Pat(pat)
                 }
@@ -160,8 +165,8 @@ impl<R: Read> PacketReader<R> {
                     match kind {
                         PidKind::Pmt => {
                             let pmt = track!(Pmt::read_from(&mut reader))?;
-                            for e in &pmt.es_info_entries {
-                                self.pids.insert(e.elementary_pid, PidKind::Pes);
+                            for es in &pmt.table {
+                                self.pids.insert(es.elementary_pid, PidKind::Pes);
                             }
                             PacketPayload::Pmt(pmt)
                         }

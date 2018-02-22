@@ -2,34 +2,48 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use packet::Pid;
-use psi::Psi;
+use packet::{Pid, StreamType};
+use packet::psi::Psi;
 
-#[derive(Debug, Clone)]
+/// Program Map Table.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Pmt {
     pub program_num: u16,
-    pub pcr_pid: u16,
-    pub es_info_entries: Vec<EsInfoEntry>,
+
+    /// The packet identifier that contains the program clock reference (PCR).
+    ///
+    /// The PCR is used to improve the random access accuracy of the stream's timing
+    /// that is derived from the program timestamp.
+    pub pcr_pid: Option<Pid>,
+
+    pub table: Vec<EsInfo>,
 }
 impl Pmt {
-    pub fn read_from<R: Read>(reader: R) -> Result<Self> {
+    // TODO:
+    const TABLE_ID: u8 = 2;
+
+    pub(super) fn read_from<R: Read>(reader: R) -> Result<Self> {
         let mut psi = track!(Psi::read_from(reader))?;
         track_assert_eq!(psi.tables.len(), 1, ErrorKind::InvalidInput);
 
         let table = psi.tables.pop().expect("Never fails");
+        track_assert_eq!(
+            table.header.table_id,
+            Self::TABLE_ID,
+            ErrorKind::InvalidInput
+        );
         track_assert!(!table.header.private_bit, ErrorKind::InvalidInput);
 
         let syntax = track_assert_some!(table.syntax.as_ref(), ErrorKind::InvalidInput);
         let mut reader = &syntax.table_data[..];
 
-        let n = track_io!(reader.read_u16::<BigEndian>())?;
-        track_assert_eq!(
-            n & 0b1110_0000_0000_0000,
-            0b1110_0000_0000_0000,
-            ErrorKind::InvalidInput,
-            "Unexpected reserved bits"
-        );
-        let pcr_pid = n & 0b0001_1111_1111_1111;
+        let pcr_pid = track!(Pid::read_from(&mut reader))?;
+        let pcr_pid = if pcr_pid.as_u16() == 0b0001_1111_1111_1111 {
+            None
+        } else {
+            Some(pcr_pid)
+        };
 
         let n = track_io!(reader.read_u16::<BigEndian>())?;
         track_assert_eq!(
@@ -47,37 +61,33 @@ impl Pmt {
         let program_info_len = n & 0b0000_0011_1111_1111;
         track_assert_eq!(program_info_len, 0, ErrorKind::Unsupported);
 
-        let mut es_info_entries = Vec::new();
+        let mut table = Vec::new();
         while !reader.is_empty() {
-            es_info_entries.push(track!(EsInfoEntry::read_from(&mut reader))?);
+            table.push(track!(EsInfo::read_from(&mut reader))?);
         }
         Ok(Pmt {
             program_num: syntax.table_id_extension,
             pcr_pid,
-            es_info_entries,
+            table,
         })
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct EsInfoEntry {
-    // TODO: enum
-    pub stream_type: u8,
+/// Elementary stream information.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EsInfo {
+    pub stream_type: StreamType,
+
+    /// The packet identifier that contains the stream type data.
     pub elementary_pid: Pid,
+
     pub descriptors: Vec<Descriptor>,
 }
-impl EsInfoEntry {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
-        let stream_type = track_io!(reader.read_u8())?;
-
-        let n = track_io!(reader.read_u16::<BigEndian>())?;
-        track_assert_eq!(
-            n & 0b1110_0000_0000_0000,
-            0b1110_0000_0000_0000,
-            ErrorKind::InvalidInput,
-            "Unexpected reserved bits"
-        );
-        let elementary_pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
+impl EsInfo {
+    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+        let stream_type = track_io!(reader.read_u8()).and_then(StreamType::from_u8)?;
+        let elementary_pid = track!(Pid::read_from(&mut reader))?;
 
         let n = track_io!(reader.read_u16::<BigEndian>())?;
         track_assert_eq!(
@@ -102,7 +112,7 @@ impl EsInfoEntry {
         }
         track_assert_eq!(reader.limit(), 0, ErrorKind::InvalidInput);
 
-        Ok(EsInfoEntry {
+        Ok(EsInfo {
             stream_type,
             elementary_pid,
             descriptors,
@@ -110,14 +120,15 @@ impl EsInfoEntry {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Program or elementary stream descriptor.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Descriptor {
-    // TODO: enum
     pub tag: u8,
     pub data: Vec<u8>,
 }
 impl Descriptor {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let tag = track_io!(reader.read_u8())?;
         let len = track_io!(reader.read_u8())?;
         let mut data = vec![0; len as usize];

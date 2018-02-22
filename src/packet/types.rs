@@ -40,6 +40,18 @@ impl Pid {
     pub fn as_u16(&self) -> u16 {
         self.0
     }
+
+    // TODO: pub(super)
+    pub(crate) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+        let n = track_io!(reader.read_u16::<BigEndian>())?;
+        track_assert_eq!(
+            n & 0b1110_0000_0000_0000,
+            0b1110_0000_0000_0000,
+            ErrorKind::InvalidInput,
+            "Unexpected reserved bits"
+        );
+        Ok(Pid(n & 0b0001_1111_1111_1111))
+    }
 }
 impl From<u8> for Pid {
     fn from(f: u8) -> Self {
