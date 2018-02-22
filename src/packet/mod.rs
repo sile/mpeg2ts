@@ -10,7 +10,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 pub use self::adaptation_field::{AdaptationExtensionField, AdaptationField};
 pub use self::null::Null;
 pub use self::pat::{Pat, ProgramAssociation};
-pub use self::pes::{Pes, PesHeader};
+pub use self::pes::Pes;
 pub use self::pmt::{Descriptor, EsInfo, Pmt};
 pub use self::stream_type::StreamType;
 pub use self::types::{Bytes, ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate,
