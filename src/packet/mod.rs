@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
-pub use self::types::{Bytes, Pid};
+pub use self::types::{Bytes, ContinuityCounter, Pid};
 
 use {ErrorKind, Result};
 use null::Null;
@@ -35,6 +35,52 @@ impl Packet {
     ///
     /// Each packet starts with this byte.
     pub const SYNC_BYTE: u8 = 0x47;
+}
+
+/// Packet header.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PacketHeader {
+    pub transport_error_indicator: bool,
+    pub transport_priority: bool,
+    pub pid: Pid,
+    pub transport_scrambling_control: u8,
+    pub continuity_counter: ContinuityCounter,
+}
+impl PacketHeader {
+    fn read_from<R: Read>(mut reader: R) -> Result<(Self, AdaptationFieldControl, bool)> {
+        let sync_byte = track_io!(reader.read_u8())?;
+        track_assert_eq!(sync_byte, Packet::SYNC_BYTE, ErrorKind::InvalidInput);
+
+        let n = track_io!(reader.read_u16::<BigEndian>())?;
+        let transport_error_indicator = (n & 0b1000_0000_0000_0000) != 0;
+        let payload_unit_start_indicator = (n & 0b0100_0000_0000_0000) != 0;
+        let transport_priority = (n & 0b0010_0000_0000_0000) != 0;
+        let pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
+
+        let n = track_io!(reader.read_u8())?;
+        let transport_scrambling_control = n >> 6;
+        let adaptation_field_control = match (n >> 4) & 0b11 {
+            0b01 => AdaptationFieldControl::PayloadOnly,
+            0b10 => AdaptationFieldControl::AdaptationFieldOnly,
+            0b11 => AdaptationFieldControl::AdaptationFieldAndPayload,
+            v => track_panic!(ErrorKind::InvalidInput, "{}", v),
+        };
+        let continuity_counter = track!(ContinuityCounter::from_u8(n & 0b1111))?;
+
+        let header = PacketHeader {
+            transport_error_indicator,
+            transport_priority,
+            pid,
+            transport_scrambling_control,
+            continuity_counter,
+        };
+        Ok((
+            header,
+            adaptation_field_control,
+            payload_unit_start_indicator,
+        ))
+    }
 }
 
 /// Packet payload.
@@ -83,7 +129,7 @@ impl<R: Read> PacketReader<R> {
             return Ok(None);
         }
 
-        let (header, adaptation_field_control) =
+        let (header, adaptation_field_control, payload_unit_start_indicator) =
             track!(PacketHeader::read_from(peek.chain(&mut reader)))?;
 
         let adaptation_field = if adaptation_field_control.has_adaptation_field() {
@@ -121,7 +167,7 @@ impl<R: Read> PacketReader<R> {
                             PacketPayload::Pmt(pmt)
                         }
                         PidKind::Pes => {
-                            if header.payload_unit_start_indicator {
+                            if payload_unit_start_indicator {
                                 let pes = track!(Pes::read_from(&mut reader))?;
                                 PacketPayload::Pes(pes)
                             } else {
@@ -288,48 +334,6 @@ pub struct LegalTimeWindow {
 pub struct SeamlessSplice {
     pub splice_type: u8,
     pub dts_next_access_unit: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct PacketHeader {
-    pub transport_error_indicator: bool,
-    pub payload_unit_start_indicator: bool,
-    pub transport_priority: bool,
-    pub pid: Pid,
-    pub transport_scrambling_control: u8,
-    pub continuity_counter: u8,
-}
-impl PacketHeader {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<(Self, AdaptationFieldControl)> {
-        let sync_byte = track_io!(reader.read_u8())?;
-        track_assert_eq!(sync_byte, Packet::SYNC_BYTE, ErrorKind::InvalidInput);
-
-        let n = track_io!(reader.read_u16::<BigEndian>())?;
-        let transport_error_indicator = (n & 0b1000_0000_0000_0000) != 0;
-        let payload_unit_start_indicator = (n & 0b0100_0000_0000_0000) != 0;
-        let transport_priority = (n & 0b0010_0000_0000_0000) != 0;
-        let pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
-
-        let n = track_io!(reader.read_u8())?;
-        let transport_scrambling_control = n >> 6;
-        let adaptation_field_control = match (n >> 4) & 0b11 {
-            0b01 => AdaptationFieldControl::PayloadOnly,
-            0b10 => AdaptationFieldControl::AdaptationFieldOnly,
-            0b11 => AdaptationFieldControl::AdaptationFieldAndPayload,
-            v => track_panic!(ErrorKind::InvalidInput, "{}", v),
-        };
-        let continuity_counter = n & 0b1111;
-
-        let header = PacketHeader {
-            transport_error_indicator,
-            payload_unit_start_indicator,
-            transport_priority,
-            pid,
-            transport_scrambling_control,
-            continuity_counter,
-        };
-        Ok((header, adaptation_field_control))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
