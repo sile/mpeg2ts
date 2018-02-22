@@ -3,9 +3,11 @@
 //! # References
 //!
 //! - [MPEG transport stream](https://en.wikipedia.org/wiki/MPEG_transport_stream)
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
+
+pub use self::types::{Bytes, Pid};
 
 use {ErrorKind, Result};
 use null::Null;
@@ -14,8 +16,6 @@ use pes::Pes;
 use pmt::Pmt;
 use time::ProgramClockReference;
 use util;
-
-pub use self::types::{Bytes, Pid};
 
 mod types;
 
@@ -48,64 +48,91 @@ pub enum PacketPayload {
     Raw(Bytes),
 }
 
+/// Packet reader.
 #[derive(Debug)]
 pub struct PacketReader<R> {
     stream: R,
-    pmt_pids: HashSet<Pid>,
-    es_pids: HashSet<Pid>,
+    pids: HashMap<Pid, PidKind>,
 }
 impl<R: Read> PacketReader<R> {
+    /// Makes a new `PacketReader` instance.
     pub fn new(stream: R) -> Self {
         PacketReader {
             stream,
-            pmt_pids: HashSet::new(),
-            es_pids: HashSet::new(),
+            pids: HashMap::new(),
         }
     }
+
+    /// Returns a reference to the underlaying byte stream.
+    pub fn stream(&self) -> &R {
+        &self.stream
+    }
+
+    /// Converts `PacketReader` into the underlaying byte stream `R`.
+    pub fn into_stream(self) -> R {
+        self.stream
+    }
+
+    /// Reads a packet.
+    ///
+    /// If the end of the stream is reached, it will return `OK (None)`.
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
         let mut reader = self.stream.by_ref().take(Packet::SIZE as u64);
-
-        let mut peek_buf = [0; 1];
-        if track_io!(reader.read(&mut peek_buf))? == 0 {
+        let mut peek = [0; 1];
+        if track_io!(reader.read(&mut peek))? == 0 {
             return Ok(None);
         }
 
         let (header, adaptation_field_control) =
-            track!(PacketHeader::read_from(peek_buf.chain(&mut reader)))?;
+            track!(PacketHeader::read_from(peek.chain(&mut reader)))?;
 
         let adaptation_field = if adaptation_field_control.has_adaptation_field() {
             Some(track!(AdaptationField::read_from(&mut reader))?)
         } else {
             None
         };
+
         let payload = if adaptation_field_control.has_payload() {
-            if header.pid == Pid::PAT {
-                let pat = track!(Pat::read_from(&mut reader))?;
-                for e in &pat.entries {
-                    self.pmt_pids.insert(e.program_map_pid);
+            let payload = match header.pid {
+                Pid::PAT => {
+                    let pat = track!(Pat::read_from(&mut reader))?;
+                    for e in &pat.entries {
+                        self.pids.insert(e.program_map_pid, PidKind::Pmt);
+                    }
+                    PacketPayload::Pat(pat)
                 }
-                Some(PacketPayload::Pat(pat))
-            } else if self.pmt_pids.contains(&header.pid) {
-                let pmt = track!(Pmt::read_from(&mut reader))?;
-                for e in &pmt.es_info_entries {
-                    self.es_pids.insert(e.elementary_pid);
+                Pid::NULL => {
+                    let null = track!(Null::read_from(&mut reader))?;
+                    PacketPayload::Null(null)
                 }
-                Some(PacketPayload::Pmt(pmt))
-            } else if self.es_pids.contains(&header.pid) {
-                if header.payload_unit_start_indicator {
-                    let pes = track!(Pes::read_from(&mut reader))?;
-                    Some(PacketPayload::Pes(pes))
-                } else {
-                    let bytes = track!(Bytes::read_from(&mut reader))?;
-                    Some(PacketPayload::Raw(bytes))
+                pid => {
+                    let kind = track_assert_some!(
+                        self.pids.get(&pid).cloned(),
+                        ErrorKind::InvalidInput,
+                        "Unknown PID: header={:?}",
+                        header
+                    );
+                    match kind {
+                        PidKind::Pmt => {
+                            let pmt = track!(Pmt::read_from(&mut reader))?;
+                            for e in &pmt.es_info_entries {
+                                self.pids.insert(e.elementary_pid, PidKind::Pes);
+                            }
+                            PacketPayload::Pmt(pmt)
+                        }
+                        PidKind::Pes => {
+                            if header.payload_unit_start_indicator {
+                                let pes = track!(Pes::read_from(&mut reader))?;
+                                PacketPayload::Pes(pes)
+                            } else {
+                                let bytes = track!(Bytes::read_from(&mut reader))?;
+                                PacketPayload::Raw(bytes)
+                            }
+                        }
+                    }
                 }
-            } else if header.pid == Pid::NULL {
-                let null = track!(Null::read_from(&mut reader))?;
-                Some(PacketPayload::Null(null))
-            } else {
-                let bytes = track!(Bytes::read_from(&mut reader))?;
-                Some(PacketPayload::Raw(bytes))
-            }
+            };
+            Some(payload)
         } else {
             None
         };
@@ -318,4 +345,10 @@ impl AdaptationFieldControl {
     pub fn has_payload(&self) -> bool {
         *self != AdaptationFieldControl::AdaptationFieldOnly
     }
+}
+
+#[derive(Debug, Clone)]
+enum PidKind {
+    Pmt,
+    Pes,
 }
