@@ -14,7 +14,6 @@
 //! - [Packetized elementary stream](https://en.wikipedia.org/wiki/Packetized_elementary_stream)
 #![warn(missing_docs)]
 extern crate byteorder;
-extern crate num_rational;
 #[macro_use]
 extern crate trackable;
 

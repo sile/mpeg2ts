@@ -1,6 +1,5 @@
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
-use num_rational::Ratio;
 
 use {ErrorKind, Result};
 
@@ -47,9 +46,6 @@ impl Timestamp {
     pub fn as_u64(&self) -> u64 {
         self.0
     }
-    pub fn as_ratio(&self) -> Ratio<u64> {
-        Ratio::new(self.0, Self::RESOLUTION)
-    }
 }
 impl From<u32> for Timestamp {
     fn from(n: u32) -> Self {
@@ -84,9 +80,6 @@ impl ProgramClockReference {
     }
     pub fn as_u64(&self) -> u64 {
         self.0
-    }
-    pub fn as_ratio(&self) -> Ratio<u64> {
-        Ratio::new(self.0, Self::RESOLUTION)
     }
 }
 impl From<u32> for ProgramClockReference {
