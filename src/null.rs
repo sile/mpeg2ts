@@ -2,7 +2,7 @@ use std::io::Read;
 
 use Result;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Null;
 impl Null {
     pub const PID: u16 = 0x1FFF;

@@ -2,12 +2,13 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use packet::Pid;
 use psi::Psi;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PatEntry {
     pub program_num: u16,
-    pub program_map_pid: u16,
+    pub program_map_pid: Pid,
 }
 impl PatEntry {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
@@ -20,7 +21,7 @@ impl PatEntry {
             ErrorKind::InvalidInput,
             "Unexpected reserved bits"
         );
-        let program_map_pid = n & 0b0001_1111_1111_1111;
+        let program_map_pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
         Ok(PatEntry {
             program_num,
             program_map_pid,
@@ -28,13 +29,12 @@ impl PatEntry {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pat {
     pub transport_stream_id: u16,
     pub entries: Vec<PatEntry>,
 }
 impl Pat {
-    pub const PID: u16 = 0;
     pub const TABLE_ID: u8 = 0;
 
     pub fn read_from<R: Read>(reader: R) -> Result<Self> {

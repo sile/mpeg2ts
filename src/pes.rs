@@ -7,7 +7,7 @@ use time::Timestamp;
 use util;
 
 /// Packetized elementary stream.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pes {
     pub header: PesHeader,
     pub data: Data,
@@ -20,7 +20,7 @@ impl Pes {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PesHeader {
     pub stream_id: u8,
     pub pes_packet_len: u16, // NOTE: `0` means ...

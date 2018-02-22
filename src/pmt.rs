@@ -2,9 +2,10 @@ use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
+use packet::Pid;
 use psi::Psi;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pmt {
     pub program_num: u16,
     pub pcr_pid: u16,
@@ -58,11 +59,11 @@ impl Pmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EsInfoEntry {
     // TODO: enum
     pub stream_type: u8,
-    pub elementary_pid: u16,
+    pub elementary_pid: Pid,
     pub descriptors: Vec<Descriptor>,
 }
 impl EsInfoEntry {
@@ -76,7 +77,7 @@ impl EsInfoEntry {
             ErrorKind::InvalidInput,
             "Unexpected reserved bits"
         );
-        let elementary_pid = n & 0b0001_1111_1111_1111;
+        let elementary_pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
 
         let n = track_io!(reader.read_u16::<BigEndian>())?;
         track_assert_eq!(
@@ -109,7 +110,7 @@ impl EsInfoEntry {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Descriptor {
     // TODO: enum
     pub tag: u8,

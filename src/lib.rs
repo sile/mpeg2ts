@@ -1,3 +1,18 @@
+//! MPEG2-TS decoding/encoding library.
+//!
+//! # References
+//!
+//! ### Specification
+//!
+//! - ISO/IEC 13818-1
+//! - ITU-T Rec. H.222.0
+//!
+//! ### Wikipedia
+//!
+//! - [MPEG transport stream](https://en.wikipedia.org/wiki/MPEG_transport_stream)
+//! - [Program-specific information](https://en.wikipedia.org/wiki/Program-specific_information)
+//! - [Packetized elementary stream](https://en.wikipedia.org/wiki/Packetized_elementary_stream)
+#![warn(missing_docs)]
 extern crate byteorder;
 extern crate num_rational;
 #[macro_use]
@@ -14,12 +29,18 @@ macro_rules! track_io {
     }
 }
 
+#[allow(missing_docs)] // TODO
 pub mod es;
+#[allow(missing_docs)] // TODO
 pub mod null;
 pub mod packet;
+#[allow(missing_docs)] // TODO
 pub mod pat;
+#[allow(missing_docs)] // TODO
 pub mod pes;
+#[allow(missing_docs)] // TODO
 pub mod pmt;
+#[allow(missing_docs)] // TODO
 pub mod psi;
 pub mod time;
 

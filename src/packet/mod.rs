@@ -1,3 +1,8 @@
+//! Transport stream packet.
+//!
+//! # References
+//!
+//! - [MPEG transport stream](https://en.wikipedia.org/wiki/MPEG_transport_stream)
 use std::collections::HashSet;
 use std::fmt;
 use std::io::Read;
@@ -12,21 +17,41 @@ use pmt::Pmt;
 use time::ProgramClockReference;
 use util;
 
-const PACKET_LEN: u64 = 188;
-const SYNC_BYTE: u8 = 0x47;
+pub use self::types::Pid;
 
-pub type Pid = u16;
+mod types;
 
-#[derive(Debug)]
-pub enum Payload {
+/// Transport stream packet.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct Packet {
+    pub header: PacketHeader,
+    pub adaptation_field: Option<AdaptationField>,
+    pub payload: Option<PacketPayload>,
+}
+impl Packet {
+    /// Size of a packet in bytes.
+    pub const SIZE: u8 = 188;
+
+    /// Synchronization byte.
+    ///
+    /// Each packet starts with this byte.
+    pub const SYNC_BYTE: u8 = 0x47;
+}
+
+/// Packet payload.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub enum PacketPayload {
     Pat(Pat),
     Pmt(Pmt),
     Pes(Pes),
     Null(Null),
-    Data(Data), // TODO
-    Todo(Vec<u8>),
+    Data(Data),    // TODO
+    Todo(Vec<u8>), // TODO
 }
 
+#[derive(Clone)]
 pub struct Data {
     buf: [u8; 188],
     len: usize,
@@ -78,7 +103,7 @@ impl<R: Read> PacketReader<R> {
         }
     }
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
-        let mut reader = self.stream.by_ref().take(PACKET_LEN);
+        let mut reader = self.stream.by_ref().take(u64::from(Packet::SIZE));
 
         let mut peek_buf = [0; 1];
         if track_io!(reader.read(&mut peek_buf))? == 0 {
@@ -94,33 +119,33 @@ impl<R: Read> PacketReader<R> {
             None
         };
         let payload = if adaptation_field_control.has_payload() {
-            if header.pid == Pat::PID {
+            if header.pid == Pid::PAT {
                 let pat = track!(Pat::read_from(&mut reader))?;
                 for e in &pat.entries {
                     self.pmt_pids.insert(e.program_map_pid);
                 }
-                Some(Payload::Pat(pat))
+                Some(PacketPayload::Pat(pat))
             } else if self.pmt_pids.contains(&header.pid) {
                 let pmt = track!(Pmt::read_from(&mut reader))?;
                 for e in &pmt.es_info_entries {
                     self.es_pids.insert(e.elementary_pid);
                 }
-                Some(Payload::Pmt(pmt))
+                Some(PacketPayload::Pmt(pmt))
             } else if self.es_pids.contains(&header.pid) {
                 if header.payload_unit_start_indicator {
                     let pes = track!(Pes::read_from(&mut reader))?;
-                    Some(Payload::Pes(pes))
+                    Some(PacketPayload::Pes(pes))
                 } else {
                     let data = track!(Data::read_from(&mut reader))?;
-                    Some(Payload::Data(data))
+                    Some(PacketPayload::Data(data))
                 }
-            } else if header.pid == Null::PID {
+            } else if header.pid == Pid::NULL {
                 let null = track!(Null::read_from(&mut reader))?;
-                Some(Payload::Null(null))
+                Some(PacketPayload::Null(null))
             } else {
                 let mut buf = vec![0; reader.limit() as usize];
                 track_io!(reader.read_exact(&mut buf))?;
-                Some(Payload::Todo(buf))
+                Some(PacketPayload::Todo(buf))
             }
         } else {
             None
@@ -135,7 +160,7 @@ impl<R: Read> PacketReader<R> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AdaptationField {
     pub discontinuity_indicator: bool,
     pub random_access_indicator: bool,
@@ -217,7 +242,7 @@ impl AdaptationField {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AdaptationExtension {
     pub legal_time_window: Option<LegalTimeWindow>,
     pub piecewise_rate: Option<u32>,
@@ -267,44 +292,37 @@ impl AdaptationExtension {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LegalTimeWindow {
     pub is_valid: bool,
     pub offset: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SeamlessSplice {
     pub splice_type: u8,
     pub dts_next_access_unit: u64,
 }
 
-#[derive(Debug)]
-pub struct Packet {
-    pub header: PacketHeader,
-    pub adaptation_field: Option<AdaptationField>,
-    pub payload: Option<Payload>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PacketHeader {
     pub transport_error_indicator: bool,
     pub payload_unit_start_indicator: bool,
     pub transport_priority: bool,
-    pub pid: u16,
+    pub pid: Pid,
     pub transport_scrambling_control: u8,
     pub continuity_counter: u8,
 }
 impl PacketHeader {
     pub fn read_from<R: Read>(mut reader: R) -> Result<(Self, AdaptationFieldControl)> {
         let sync_byte = track_io!(reader.read_u8())?;
-        track_assert_eq!(sync_byte, SYNC_BYTE, ErrorKind::InvalidInput);
+        track_assert_eq!(sync_byte, Packet::SYNC_BYTE, ErrorKind::InvalidInput);
 
         let n = track_io!(reader.read_u16::<BigEndian>())?;
         let transport_error_indicator = (n & 0b1000_0000_0000_0000) != 0;
         let payload_unit_start_indicator = (n & 0b0100_0000_0000_0000) != 0;
         let transport_priority = (n & 0b0010_0000_0000_0000) != 0;
-        let pid = n & 0b0001_1111_1111_1111;
+        let pid = track!(Pid::new(n & 0b0001_1111_1111_1111))?;
 
         let n = track_io!(reader.read_u8())?;
         let transport_scrambling_control = n >> 6;

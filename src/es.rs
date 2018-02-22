@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use {ErrorKind, Result};
-use packet::{PacketReader, Payload};
+use packet::{PacketPayload, PacketReader, Pid};
 use time::{ProgramClockReference, Timestamp};
 
 // TODO: name
@@ -14,14 +14,14 @@ pub struct EsFrame {
     pub data: Vec<u8>,
 
     // TODO:
-    pid: u16,
+    pid: Pid,
     frame_len: Option<usize>,
 }
 
 #[derive(Debug)]
 pub struct EsFrameReader<R> {
     packet_reader: PacketReader<R>,
-    es_frames: HashMap<u16, EsFrame>,
+    es_frames: HashMap<Pid, EsFrame>,
     pcr: ProgramClockReference,
 }
 impl<R: Read> EsFrameReader<R> {
@@ -46,7 +46,7 @@ impl<R: Read> EsFrameReader<R> {
                 self.pcr = pcr;
             }
             match packet.payload {
-                Some(Payload::Pes(ref pes)) => {
+                Some(PacketPayload::Pes(ref pes)) => {
                     let stream_id = pes.header.stream_id;
 
                     let frame_len = if pes.header.pes_packet_len != 0 {
@@ -72,7 +72,7 @@ impl<R: Read> EsFrameReader<R> {
                         }
                     }
                 }
-                Some(Payload::Data(ref data)) => {
+                Some(PacketPayload::Data(ref data)) => {
                     let mut frame = track_assert_some!(
                         self.es_frames.remove(&packet.header.pid),
                         ErrorKind::InvalidInput
