@@ -1,8 +1,8 @@
 use std::io::Read;
-use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 
 use {ErrorKind, Result};
-use util;
+use util::{self, WithCrc32};
 
 /// Program-specific information.
 #[derive(Debug)]
@@ -37,11 +37,19 @@ pub struct PsiTable {
     pub syntax: Option<PsiTableSyntax>,
 }
 impl PsiTable {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    pub fn read_from<R: Read>(reader: R) -> Result<Self> {
+        let mut reader = WithCrc32::new(reader);
         let (header, syntax_section_len) = track!(PsiTableHeader::read_from(&mut reader))?;
         let syntax = if syntax_section_len > 0 {
-            let reader = reader.by_ref().take(u64::from(syntax_section_len));
-            Some(track!(PsiTableSyntax::read_from(reader))?)
+            let syntax = {
+                track_assert!(syntax_section_len >= 4, ErrorKind::InvalidInput);
+                let reader = reader.by_ref().take(u64::from(syntax_section_len - 4));
+                track!(PsiTableSyntax::read_from(reader))?
+            };
+            let crc32 = reader.crc32();
+            let expected_crc32 = track_io!(reader.read_u32::<BigEndian>())?;
+            track_assert_eq!(crc32, expected_crc32, ErrorKind::InvalidInput);
+            Some(syntax)
         } else {
             None
         };
@@ -95,7 +103,6 @@ pub struct PsiTableSyntax {
     pub section_number: u8,
     pub last_section_number: u8,
     pub table_data: Vec<u8>,
-    pub crc32: u32,
 }
 impl PsiTableSyntax {
     pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
@@ -117,12 +124,6 @@ impl PsiTableSyntax {
         let mut table_data = Vec::new();
         track_io!(reader.read_to_end(&mut table_data))?;
 
-        let table_data_len = table_data.len();
-        track_assert!(table_data_len >= 4, ErrorKind::InvalidInput);
-
-        let crc32 = BigEndian::read_u32(&table_data[table_data_len - 4..]);
-        table_data.truncate(table_data_len - 4);
-
         Ok(PsiTableSyntax {
             table_id_extension,
             version_number,
@@ -130,7 +131,6 @@ impl PsiTableSyntax {
             section_number,
             last_section_number,
             table_data,
-            crc32,
         })
     }
 }
