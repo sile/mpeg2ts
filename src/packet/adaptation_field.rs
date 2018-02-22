@@ -48,12 +48,12 @@ impl AdaptationField {
         let extension_flag = (b & 0b0000_0001) != 0;
 
         let pcr = if pcr_flag {
-            Some(track!(ClockReference::read_from(&mut reader))?)
+            Some(track!(ClockReference::read_pcr_from(&mut reader))?)
         } else {
             None
         };
         let opcr = if opcr_flag {
-            Some(track!(ClockReference::read_from(&mut reader))?)
+            Some(track!(ClockReference::read_pcr_from(&mut reader))?)
         } else {
             None
         };

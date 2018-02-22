@@ -23,9 +23,9 @@ fn main() {
     let mut reader = EsFrameReader::new(PacketReader::new(std::io::stdin()));
     while let Some(frame) = track_try_unwrap!(reader.read_es_frame()) {
         if stream_id.is_none() {
-            stream_id = Some(frame.stream_id);
+            stream_id = Some(frame.stream_id.as_u8());
         }
-        if stream_id != Some(frame.stream_id) {
+        if stream_id != Some(frame.stream_id.as_u8()) {
             continue;
         }
         track_try_unwrap!(

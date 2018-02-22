@@ -29,14 +29,10 @@ macro_rules! track_io {
 }
 
 #[allow(missing_docs)] // TODO
-pub mod es;
-#[allow(missing_docs)] // TODO
-pub mod null;
-pub mod packet;
+pub mod es; // s/es/pes_packet/
+pub mod packet; // s/packet/ts_packet/
 #[allow(missing_docs)] // TODO
 pub mod pat;
-#[allow(missing_docs)] // TODO
-pub mod pes;
 #[allow(missing_docs)] // TODO
 pub mod pmt;
 #[allow(missing_docs)] // TODO

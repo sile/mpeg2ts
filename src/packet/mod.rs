@@ -7,18 +7,20 @@ use std::collections::HashMap;
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 
-pub use self::adaptation_field::{AdaptationExtensionField, AdaptationField, LegalTimeWindow,
-                                 PiecewiseRate, SeamlessSplice};
-pub use self::types::{Bytes, ContinuityCounter, Pid, TransportScramblingControl};
+pub use self::adaptation_field::{AdaptationExtensionField, AdaptationField};
+pub use self::null::Null;
+pub use self::pes::{Pes, PesHeader};
+pub use self::types::{Bytes, ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate,
+                      SeamlessSplice, TransportScramblingControl};
 
 use {ErrorKind, Result};
-use null::Null;
 use pat::Pat;
-use pes::Pes;
 use pmt::Pmt;
 use self::adaptation_field::AdaptationFieldControl;
 
 mod adaptation_field;
+mod null;
+mod pes;
 mod types;
 
 /// Transport stream packet.
