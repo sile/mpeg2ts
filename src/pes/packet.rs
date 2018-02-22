@@ -40,6 +40,10 @@ pub struct PesHeader {
     pub escr: Option<ClockReference>,
 }
 impl PesHeader {
+    pub(super) fn optional_header_len(&self) -> u16 {
+        3 + self.pts.map_or(0, |_| 5) + self.dts.map_or(0, |_| 5) + self.escr.map_or(0, |_| 6)
+    }
+
     pub(crate) fn read_from<R: Read>(mut reader: R) -> Result<(Self, u16)> {
         let packet_start_code_prefix = track_io!(reader.read_uint::<BigEndian>(3))?;
         track_assert_eq!(packet_start_code_prefix, 0x00_0001, ErrorKind::InvalidInput);

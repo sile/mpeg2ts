@@ -4,6 +4,7 @@ extern crate mpeg2ts;
 extern crate trackable;
 
 use clap::{App, Arg};
+use mpeg2ts::pes::{PesPacketReader, ReadPesPacket};
 use mpeg2ts::ts::{ReadTsPacket, TsPacketReader};
 
 fn main() {
@@ -23,6 +24,13 @@ fn main() {
                 println!("{:?}", packet);
             }
         }
+        "pes" => {
+            let mut reader = PesPacketReader::new(TsPacketReader::new(std::io::stdin()));
+            while let Some(packet) = track_try_unwrap!(reader.read_pes_packet()) {
+                println!("{:?} {} bytes", packet.header, packet.data.len());
+            }
+        }
+        "es" => unimplemented!(),
         _ => unreachable!(),
     }
 }
