@@ -1,5 +1,5 @@
-use std::io::Read;
-use byteorder::ReadBytesExt;
+use std::io::{Read, Write};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use time::ClockReference;
@@ -30,10 +30,28 @@ pub struct AdaptationField {
     pub extension: Option<AdaptationExtensionField>,
 }
 impl AdaptationField {
-    pub(super) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    pub(super) fn external_size(&self) -> usize {
+        let mut n = 1 /* adaptation_field_len */ + 1 /* flags */;
+        if self.pcr.is_some() {
+            n += 6;
+        }
+        if self.opcr.is_some() {
+            n += 6;
+        }
+        if self.splice_countdown.is_some() {
+            n += 1;
+        }
+        n += self.transport_private_data.len();
+        if let Some(ref x) = self.extension {
+            n += x.external_size();
+        }
+        n
+    }
+
+    pub(super) fn read_from<R: Read>(mut reader: R) -> Result<Option<Self>> {
         let adaptation_field_len = track_io!(reader.read_u8())?;
         if adaptation_field_len == 0 {
-            return Ok(AdaptationField::default());
+            return Ok(None);
         }
         let mut reader = reader.take(u64::from(adaptation_field_len));
 
@@ -77,7 +95,7 @@ impl AdaptationField {
         };
         track!(util::consume_stuffing_bytes(reader))?;
 
-        Ok(AdaptationField {
+        Ok(Some(AdaptationField {
             discontinuity_indicator,
             random_access_indicator,
             es_priority_indicator,
@@ -86,21 +104,51 @@ impl AdaptationField {
             splice_countdown,
             transport_private_data,
             extension,
-        })
+        }))
     }
-}
-impl Default for AdaptationField {
-    fn default() -> Self {
-        AdaptationField {
-            discontinuity_indicator: false,
-            random_access_indicator: false,
-            es_priority_indicator: false,
-            pcr: None,
-            opcr: None,
-            splice_countdown: None,
-            transport_private_data: Vec::new(),
-            extension: None,
+
+    pub(super) fn write_stuffing_bytes<W: Write>(mut writer: W, field_len: u8) -> Result<()> {
+        track_io!(writer.write_u8(field_len))?;
+        if field_len == 0 {
+            return Ok(());
         }
+        track_io!(writer.write_u8(0))?;
+        track!(util::write_stuffing_bytes(
+            &mut writer,
+            (field_len - 1) as usize
+        ))?;
+        Ok(())
+    }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W, field_len: u8) -> Result<()> {
+        track_io!(writer.write_u8(field_len))?;
+
+        let n = ((self.discontinuity_indicator as u8) << 7)
+            | ((self.random_access_indicator as u8) << 6)
+            | ((self.es_priority_indicator as u8) << 5)
+            | ((self.pcr.is_some() as u8) << 4) | ((self.opcr.is_some() as u8) << 3)
+            | ((self.splice_countdown.is_some() as u8) << 2)
+            | (((!self.transport_private_data.is_empty()) as u8) << 1)
+            | self.extension.is_some() as u8;
+        track_io!(writer.write_u8(n))?;
+
+        if let Some(ref x) = self.pcr {
+            track!(x.write_pcr_to(&mut writer))?;
+        }
+        if let Some(ref x) = self.opcr {
+            track!(x.write_pcr_to(&mut writer))?;
+        }
+        if let Some(x) = self.splice_countdown {
+            track_io!(writer.write_i8(x))?;
+        }
+        track_io!(writer.write_all(&self.transport_private_data))?;
+        if let Some(ref x) = self.extension {
+            track!(x.write_to(&mut writer))?;
+        }
+
+        let stuffing_len = (field_len + 1) as usize - self.external_size();
+        track!(util::write_stuffing_bytes(writer, stuffing_len))?;
+        Ok(())
     }
 }
 
@@ -113,6 +161,20 @@ pub struct AdaptationExtensionField {
     pub seamless_splice: Option<SeamlessSplice>,
 }
 impl AdaptationExtensionField {
+    fn external_size(&self) -> usize {
+        let mut n = 1 /* length */ + 1 /* flags */;
+        if self.legal_time_window.is_some() {
+            n += 2;
+        }
+        if self.piecewise_rate.is_some() {
+            n += 3;
+        }
+        if self.seamless_splice.is_some() {
+            n += 5;
+        }
+        n
+    }
+
     fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let extension_len = track_io!(reader.read_u8())?;
         let mut reader = reader.take(u64::from(extension_len));
@@ -144,6 +206,26 @@ impl AdaptationExtensionField {
             piecewise_rate,
             seamless_splice,
         })
+    }
+
+    fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_u8(self.external_size() as u8 - 1))?;
+
+        let n = ((self.legal_time_window.is_some() as u8) << 7)
+            | ((self.piecewise_rate.is_some() as u8) << 6)
+            | ((self.seamless_splice.is_some() as u8) << 5);
+        track_io!(writer.write_u8(n))?;
+
+        if let Some(ref x) = self.legal_time_window {
+            track!(x.write_to(&mut writer))?;
+        }
+        if let Some(ref x) = self.piecewise_rate {
+            track!(x.write_to(&mut writer))?;
+        }
+        if let Some(ref x) = self.seamless_splice {
+            track!(x.write_to(&mut writer))?;
+        }
+        Ok(())
     }
 }
 

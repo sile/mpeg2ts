@@ -1,10 +1,10 @@
-use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use es::StreamType;
 use ts::{Pid, VersionNumber};
-use ts::psi::Psi;
+use ts::psi::{Psi, PsiTable, PsiTableHeader, PsiTableSyntax};
 
 /// Program Map Table.
 #[allow(missing_docs)]
@@ -74,6 +74,42 @@ impl Pmt {
             table,
         })
     }
+
+    pub(super) fn write_to<W: Write>(&self, writer: W) -> Result<()> {
+        track!(self.to_psi().and_then(|psi| psi.write_to(writer)))
+    }
+
+    fn to_psi(&self) -> Result<Psi> {
+        let mut table_data = Vec::new();
+        if let Some(pid) = self.pcr_pid {
+            track_assert_ne!(pid.as_u16(), 0b0001_1111_1111_1111, ErrorKind::InvalidInput);
+            track!(pid.write_to(&mut table_data))?;
+        } else {
+            track_io!(table_data.write_u16::<BigEndian>(0xFFFF))?;
+        }
+
+        let n = 0b1111_0000_0000_0000;
+        track_io!(table_data.write_u16::<BigEndian>(n))?;
+
+        for info in &self.table {
+            track!(info.write_to(&mut table_data))?;
+        }
+
+        let header = PsiTableHeader {
+            table_id: Self::TABLE_ID,
+            private_bit: false,
+        };
+        let syntax = Some(PsiTableSyntax {
+            table_id_extension: self.program_num,
+            version_number: self.version_number,
+            current_next_indicator: true,
+            section_number: 0,
+            last_section_number: 0,
+            table_data,
+        });
+        let tables = vec![PsiTable { header, syntax }];
+        Ok(Psi { tables })
+    }
 }
 
 /// Elementary stream information.
@@ -121,6 +157,22 @@ impl EsInfo {
             descriptors,
         })
     }
+
+    fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_u8(self.stream_type as u8))?;
+        track!(self.elementary_pid.write_to(&mut writer))?;
+
+        let es_info_len: usize = self.descriptors.iter().map(|d| 2 + d.data.len()).sum();
+        track_assert!(es_info_len <= 0b0011_1111_1111, ErrorKind::InvalidInput);
+
+        let n = 0b1111_0000_0000_0000 | es_info_len as u16;
+        track_io!(writer.write_u16::<BigEndian>(n))?;
+
+        for d in &self.descriptors {
+            track!(d.write_to(&mut writer))?;
+        }
+        Ok(())
+    }
 }
 
 /// Program or elementary stream descriptor.
@@ -137,5 +189,12 @@ impl Descriptor {
         let mut data = vec![0; len as usize];
         track_io!(reader.read_exact(&mut data))?;
         Ok(Descriptor { tag, data })
+    }
+
+    fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_u8(self.tag))?;
+        track_io!(writer.write_u8(self.data.len() as u8))?;
+        track_io!(writer.write_all(&self.data))?;
+        Ok(())
     }
 }

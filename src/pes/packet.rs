@@ -1,10 +1,12 @@
-use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use es::StreamId;
 use time::{ClockReference, Timestamp};
 use util;
+
+const PACKET_START_CODE_PREFIX: u64 = 0x00_0001;
 
 /// PES packet.
 #[allow(missing_docs)]
@@ -46,7 +48,11 @@ impl PesHeader {
 
     pub(crate) fn read_from<R: Read>(mut reader: R) -> Result<(Self, u16)> {
         let packet_start_code_prefix = track_io!(reader.read_uint::<BigEndian>(3))?;
-        track_assert_eq!(packet_start_code_prefix, 0x00_0001, ErrorKind::InvalidInput);
+        track_assert_eq!(
+            packet_start_code_prefix,
+            PACKET_START_CODE_PREFIX,
+            ErrorKind::InvalidInput
+        );
 
         let stream_id = StreamId::new(track_io!(reader.read_u8())?);
         let packet_len = track_io!(reader.read_u16::<BigEndian>())?;
@@ -115,5 +121,39 @@ impl PesHeader {
             escr,
         };
         Ok((header, packet_len))
+    }
+
+    pub(crate) fn write_to<W: Write>(&self, mut writer: W, pes_header_len: u16) -> Result<()> {
+        track_io!(writer.write_uint::<BigEndian>(PACKET_START_CODE_PREFIX, 3))?;
+        track_io!(writer.write_u8(self.stream_id.as_u8()))?;
+        track_io!(writer.write_u16::<BigEndian>(pes_header_len))?;
+
+        let n = 0b1000_0000 | ((self.priority as u8) << 3)
+            | ((self.data_alignment_indicator as u8) << 2)
+            | ((self.copyright as u8) << 1) | self.original_or_copy as u8;
+        track_io!(writer.write_u8(n))?;
+
+        if self.dts.is_some() {
+            track_assert!(self.pts.is_some(), ErrorKind::InvalidInput);
+        }
+        let n = ((self.pts.is_some() as u8) << 7) | ((self.dts.is_some() as u8) << 6)
+            | ((self.escr.is_some() as u8) << 5);
+        track_io!(writer.write_u8(n))?;
+
+        let pes_header_len = self.optional_header_len() as u8 - 3;
+        track_io!(writer.write_u8(pes_header_len))?;
+        if let Some(x) = self.pts {
+            let check_bits = if self.dts.is_some() { 3 } else { 2 };
+            track!(x.write_to(&mut writer, check_bits))?;
+        }
+        if let Some(x) = self.dts {
+            let check_bits = 1;
+            track!(x.write_to(&mut writer, check_bits))?;
+        }
+        if let Some(x) = self.escr {
+            track!(x.write_escr_to(&mut writer))?;
+        }
+
+        Ok(())
     }
 }

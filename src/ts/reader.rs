@@ -51,7 +51,7 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
             track!(TsHeader::read_from(peek.chain(&mut reader)))?;
 
         let adaptation_field = if adaptation_field_control.has_adaptation_field() {
-            Some(track!(AdaptationField::read_from(&mut reader))?)
+            track!(AdaptationField::read_from(&mut reader))?
         } else {
             None
         };

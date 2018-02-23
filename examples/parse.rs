@@ -33,7 +33,7 @@ fn main() {
                 println!("{:?}", packet);
             }
         }
-        "pes-pakcet" => {
+        "pes-packet" => {
             let mut reader = PesPacketReader::new(TsPacketReader::new(std::io::stdin()));
             while let Some(packet) = track_try_unwrap!(reader.read_pes_packet()) {
                 println!("{:?} {} bytes", packet.header, packet.data.len());

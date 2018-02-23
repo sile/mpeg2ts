@@ -1,6 +1,6 @@
 //! Time-related constituent elements.
-use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 
@@ -62,6 +62,17 @@ impl Timestamp {
         track_assert_eq!((n >> 36) as u8, check_bits, ErrorKind::InvalidInput);
         track!(Self::from_u64(n))
     }
+
+    pub(crate) fn write_to<W: Write>(&self, mut writer: W, check_bits: u8) -> Result<()> {
+        let n0 = u64::from(check_bits);
+        let n1 = self.0 >> 30;
+        let n2 = (self.0 >> 15) & ((1 << 15) - 1);
+        let n3 = self.0 & ((1 << 15) - 1);
+
+        let n = (n0 << 36) | (n1 << 33) | (1 << 32) | (n2 << 17) | (1 << 16) | (n3 << 1) | 1;
+        track_io!(writer.write_uint::<BigEndian>(n, 5))?;
+        Ok(())
+    }
 }
 impl From<u32> for Timestamp {
     fn from(n: u32) -> Self {
@@ -106,12 +117,21 @@ impl ClockReference {
         Ok(ClockReference(base * 300 + extension))
     }
 
+    pub(crate) fn write_pcr_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        let base = self.0 / 300;
+        let extension = self.0 & 0b1_1111_1111;
+
+        let n = (base << 15) | extension;
+        track_io!(writer.write_uint::<BigEndian>(n, 6))?;
+        Ok(())
+    }
+
     pub(crate) fn read_escr_from<R: Read>(mut reader: R) -> Result<Self> {
         let n = track_io!(reader.read_uint::<BigEndian>(6))?;
         track_assert_eq!(n >> 46, 0, ErrorKind::InvalidInput);
 
         track_assert_eq!(n & 1, 1, ErrorKind::InvalidInput);
-        let extension = n & 0b1_1111_1111;
+        let extension = (n >> 1) & 0b1_1111_1111;
 
         let n = n >> 10;
         track_assert_eq!(n & 1, 1, ErrorKind::InvalidInput);
@@ -123,6 +143,21 @@ impl ClockReference {
         let n2 = (n >> 33) & ((1 << 3) - 1);
         let base = n0 | (n1 << 15) | (n2 << 30);
         Ok(ClockReference(base * 300 + extension))
+    }
+
+    pub(crate) fn write_escr_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        let base = self.0 / 300;
+        let extension = self.0 & 0b1_1111_1111;
+
+        let marker = 1;
+        let base0 = base & ((1 << 15) - 1);
+        let base1 = (base >> 15) & ((1 << 15) - 1);
+        let base2 = base >> 30;
+
+        let n = marker | (extension << 1) | (marker << 10) | (base0 << 11) | (marker << 26)
+            | (base1 << 27) | (marker << 42) | (base2 << 43);
+        track_io!(writer.write_uint::<BigEndian>(n, 6))?;
+        Ok(())
     }
 }
 impl From<u32> for ClockReference {

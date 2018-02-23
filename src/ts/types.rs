@@ -1,8 +1,8 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::ops::Deref;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use ts::TsPacket;
@@ -50,6 +50,12 @@ impl Pid {
             "Unexpected reserved bits"
         );
         Ok(Pid(n & 0b0001_1111_1111_1111))
+    }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        let n = 0b1110_0000_0000_0000 | self.0;
+        track_io!(writer.write_u16::<BigEndian>(n))?;
+        Ok(())
     }
 }
 impl From<u8> for Pid {
@@ -204,6 +210,11 @@ impl Bytes {
         }
         Ok(Bytes { buf, len: offset })
     }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_all(self.as_ref()))?;
+        Ok(())
+    }
 }
 impl Deref for Bytes {
     type Target = [u8];
@@ -296,6 +307,12 @@ impl LegalTimeWindow {
             offset: n & 0b0111_1111_1111_1111,
         })
     }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        let n = ((self.is_valid as u16) << 15) | self.offset;
+        track_io!(writer.write_u16::<BigEndian>(n))?;
+        Ok(())
+    }
 }
 
 /// Piecewise rate.
@@ -329,6 +346,11 @@ impl PiecewiseRate {
     pub(super) fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let n = track_io!(reader.read_uint::<BigEndian>(3))? as u32;
         Ok(PiecewiseRate(n & 0x3FFF_FFFF))
+    }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_uint::<BigEndian>(u64::from(self.0), 3))?;
+        Ok(())
     }
 }
 
@@ -378,6 +400,14 @@ impl SeamlessSplice {
             splice_type: (n >> 36) as u8,
             dts_next_access_unit: track!(Timestamp::from_u64(n & 0x0F_FFFF_FFFF))?,
         })
+    }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track!(
+            self.dts_next_access_unit
+                .write_to(&mut writer, self.splice_type)
+        )?;
+        Ok(())
     }
 }
 

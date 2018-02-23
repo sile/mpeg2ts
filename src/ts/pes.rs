@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 
 use Result;
 use pes::PesHeader;
@@ -21,5 +21,11 @@ impl Pes {
             pes_packet_len,
             data,
         })
+    }
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track!(self.header.write_to(&mut writer, self.pes_packet_len))?;
+        track!(self.data.write_to(writer))?;
+        Ok(())
     }
 }

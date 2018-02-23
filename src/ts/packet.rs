@@ -1,5 +1,5 @@
-use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Cursor, Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use ts::{AdaptationField, ContinuityCounter, Pid, TransportScramblingControl};
@@ -22,6 +22,59 @@ impl TsPacket {
     ///
     /// Each packet starts with this byte.
     pub const SYNC_BYTE: u8 = 0x47;
+
+    pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        let adaptation_field_control =
+            match (self.adaptation_field.is_some(), self.payload.is_some()) {
+                (true, true) => AdaptationFieldControl::AdaptationFieldAndPayload,
+                (true, false) => AdaptationFieldControl::AdaptationFieldOnly,
+                (false, true) => AdaptationFieldControl::PayloadOnly,
+                (false, false) => track_panic!(ErrorKind::InvalidInput, "Reserved for future use"),
+            };
+        let payload_unit_start_indicator = match self.payload {
+            Some(TsPayload::Raw(_)) | Some(TsPayload::Null(_)) | None => false,
+            _ => true,
+        };
+        track!(self.header.write_to(
+            &mut writer,
+            adaptation_field_control,
+            payload_unit_start_indicator
+        ))?;
+
+        let mut payload_buf = [0; TsPacket::SIZE - 4];
+        let payload_len = if let Some(ref payload) = self.payload {
+            let mut writer = Cursor::new(&mut payload_buf[..]);
+            track!(payload.write_to(&mut writer))?;
+            writer.position() as usize
+        } else {
+            0
+        };
+
+        let required_len = self.adaptation_field
+            .as_ref()
+            .map_or(0, |a| a.external_size());
+        let free_len = TsPacket::SIZE - 4 - payload_len;
+        track_assert!(
+            required_len <= free_len,
+            ErrorKind::InvalidInput,
+            "No space for adaptation field: required={}, free={}",
+            required_len,
+            free_len,
+        );
+        if let Some(ref adaptation_field) = self.adaptation_field {
+            let adaptation_field_len = (free_len - 1) as u8;
+            track!(adaptation_field.write_to(&mut writer, adaptation_field_len))?;
+        } else if free_len > 0 {
+            let adaptation_field_len = (free_len - 1) as u8;
+            track!(AdaptationField::write_stuffing_bytes(
+                &mut writer,
+                adaptation_field_len
+            ))?;
+        }
+
+        track_io!(writer.write_all(&payload_buf[..payload_len]))?;
+        Ok(())
+    }
 }
 
 /// TS packet header.
@@ -65,6 +118,27 @@ impl TsHeader {
             payload_unit_start_indicator,
         ))
     }
+
+    fn write_to<W: Write>(
+        &self,
+        mut writer: W,
+        adaptation_field_control: AdaptationFieldControl,
+        payload_unit_start_indicator: bool,
+    ) -> Result<()> {
+        track_io!(writer.write_u8(TsPacket::SYNC_BYTE))?;
+
+        let n = ((self.transport_error_indicator as u16) << 15)
+            | ((payload_unit_start_indicator as u16) << 14)
+            | ((self.transport_priority as u16) << 13) | self.pid.as_u16();
+        track_io!(writer.write_u16::<BigEndian>(n))?;
+
+        let n = ((self.transport_scrambling_control as u8) << 6)
+            | ((adaptation_field_control as u8) << 4)
+            | self.continuity_counter.as_u8();
+        track_io!(writer.write_u8(n))?;
+
+        Ok(())
+    }
 }
 
 /// TS packet payload.
@@ -77,4 +151,15 @@ pub enum TsPayload {
     Pes(Pes),
     Null(Null),
     Raw(Bytes),
+}
+impl TsPayload {
+    fn write_to<W: Write>(&self, writer: W) -> Result<()> {
+        match *self {
+            TsPayload::Pat(ref x) => track!(x.write_to(writer)),
+            TsPayload::Pmt(ref x) => track!(x.write_to(writer)),
+            TsPayload::Pes(ref x) => track!(x.write_to(writer)),
+            TsPayload::Null(_) => Ok(()),
+            TsPayload::Raw(ref x) => track!(x.write_to(writer)),
+        }
+    }
 }

@@ -1,9 +1,11 @@
-use std::io::Read;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use {ErrorKind, Result};
 use ts::VersionNumber;
 use util::{self, WithCrc32};
+
+const MAX_SYNTAX_SECTION_LEN: usize = 1021;
 
 /// Program-specific information.
 #[derive(Debug)]
@@ -31,6 +33,14 @@ impl Psi {
         }
         Ok(Psi { tables })
     }
+
+    pub fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_u8(0))?; // pointer field
+        for table in &self.tables {
+            track!(table.write_to(&mut writer))?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -39,7 +49,7 @@ pub struct PsiTable {
     pub syntax: Option<PsiTableSyntax>,
 }
 impl PsiTable {
-    pub fn read_from<R: Read>(reader: R) -> Result<Self> {
+    fn read_from<R: Read>(reader: R) -> Result<Self> {
         let mut reader = WithCrc32::new(reader);
         let (header, syntax_section_len) = track!(PsiTableHeader::read_from(&mut reader))?;
         let syntax = if syntax_section_len > 0 {
@@ -57,6 +67,20 @@ impl PsiTable {
         };
         Ok(PsiTable { header, syntax })
     }
+
+    fn write_to<W: Write>(&self, writer: W) -> Result<()> {
+        let mut writer = WithCrc32::new(writer);
+
+        let syntax_section_len = self.syntax.as_ref().map_or(0, |s| s.external_size());
+        track!(self.header.write_to(&mut writer, syntax_section_len))?;
+        if let Some(ref x) = self.syntax {
+            track!(x.write_to(&mut writer))?;
+
+            let crc32 = writer.crc32();
+            track_io!(writer.write_u32::<BigEndian>(crc32))?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -65,7 +89,7 @@ pub struct PsiTableHeader {
     pub private_bit: bool,
 }
 impl PsiTableHeader {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<(Self, u16)> {
+    fn read_from<R: Read>(mut reader: R) -> Result<(Self, u16)> {
         let table_id = track_io!(reader.read_u8())?;
 
         let n = track_io!(reader.read_u16::<BigEndian>())?;
@@ -84,7 +108,10 @@ impl PsiTableHeader {
             "Unexpected section length unused bits"
         );
         let syntax_section_len = n & 0b0000_0011_1111_1111;
-        track_assert!(syntax_section_len <= 1021, ErrorKind::InvalidInput);
+        track_assert!(
+            (syntax_section_len as usize) <= MAX_SYNTAX_SECTION_LEN,
+            ErrorKind::InvalidInput
+        );
         if syntax_section_indicator {
             track_assert_ne!(syntax_section_len, 0, ErrorKind::InvalidInput);
         }
@@ -94,6 +121,21 @@ impl PsiTableHeader {
             private_bit,
         };
         Ok((header, syntax_section_len))
+    }
+
+    fn write_to<W: Write>(&self, mut writer: W, syntax_section_len: usize) -> Result<()> {
+        track_assert!(
+            syntax_section_len <= MAX_SYNTAX_SECTION_LEN,
+            ErrorKind::InvalidInput
+        );
+
+        track_io!(writer.write_u8(self.table_id))?;
+
+        let n = (((syntax_section_len != 0) as u16) << 15) | ((self.private_bit as u16) << 14)
+            | 0b0011_0000_0000_0000 | syntax_section_len as u16;
+        track_io!(writer.write_u16::<BigEndian>(n))?;
+
+        Ok(())
     }
 }
 
@@ -107,7 +149,16 @@ pub struct PsiTableSyntax {
     pub table_data: Vec<u8>,
 }
 impl PsiTableSyntax {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    fn external_size(&self) -> usize {
+        2 /* table_id_extension */ +
+            1 /* version_number and current_next_indicator */ +
+            1 /* section_number */ +
+            1 /* last_section_number */ +
+            self.table_data.len() /* table_data */ +
+            4 /* CRC32 */
+    }
+
+    fn read_from<R: Read>(mut reader: R) -> Result<Self> {
         let table_id_extension = track_io!(reader.read_u16::<BigEndian>())?;
 
         let b = track_io!(reader.read_u8())?;
@@ -134,5 +185,19 @@ impl PsiTableSyntax {
             last_section_number,
             table_data,
         })
+    }
+
+    fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_io!(writer.write_u16::<BigEndian>(self.table_id_extension))?;
+
+        let n =
+            0b1100_0000 | (self.version_number.as_u8() << 1) | self.current_next_indicator as u8;
+        track_io!(writer.write_u8(n))?;
+
+        track_io!(writer.write_u8(self.section_number))?;
+        track_io!(writer.write_u8(self.last_section_number))?;
+        track_io!(writer.write_all(&self.table_data))?;
+
+        Ok(())
     }
 }
