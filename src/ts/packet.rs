@@ -8,7 +8,7 @@ use super::adaptation_field::AdaptationFieldControl;
 
 /// Transport stream packet.
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TsPacket {
     pub header: TsHeader,
     pub adaptation_field: Option<AdaptationField>,
@@ -24,23 +24,6 @@ impl TsPacket {
     pub const SYNC_BYTE: u8 = 0x47;
 
     pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
-        let adaptation_field_control =
-            match (self.adaptation_field.is_some(), self.payload.is_some()) {
-                (true, true) => AdaptationFieldControl::AdaptationFieldAndPayload,
-                (true, false) => AdaptationFieldControl::AdaptationFieldOnly,
-                (false, true) => AdaptationFieldControl::PayloadOnly,
-                (false, false) => track_panic!(ErrorKind::InvalidInput, "Reserved for future use"),
-            };
-        let payload_unit_start_indicator = match self.payload {
-            Some(TsPayload::Raw(_)) | Some(TsPayload::Null(_)) | None => false,
-            _ => true,
-        };
-        track!(self.header.write_to(
-            &mut writer,
-            adaptation_field_control,
-            payload_unit_start_indicator
-        ))?;
-
         let mut payload_buf = [0; TsPacket::SIZE - 4];
         let payload_len = if let Some(ref payload) = self.payload {
             let mut writer = Cursor::new(&mut payload_buf[..]);
@@ -61,6 +44,26 @@ impl TsPacket {
             required_len,
             free_len,
         );
+
+        let adaptation_field_control = match (
+            self.adaptation_field.is_some() || free_len > 0,
+            self.payload.is_some(),
+        ) {
+            (true, true) => AdaptationFieldControl::AdaptationFieldAndPayload,
+            (true, false) => AdaptationFieldControl::AdaptationFieldOnly,
+            (false, true) => AdaptationFieldControl::PayloadOnly,
+            (false, false) => track_panic!(ErrorKind::InvalidInput, "Reserved for future use"),
+        };
+        let payload_unit_start_indicator = match self.payload {
+            Some(TsPayload::Raw(_)) | Some(TsPayload::Null(_)) | None => false,
+            _ => true,
+        };
+        track!(self.header.write_to(
+            &mut writer,
+            adaptation_field_control,
+            payload_unit_start_indicator
+        ))?;
+
         if let Some(ref adaptation_field) = self.adaptation_field {
             let adaptation_field_len = (free_len - 1) as u8;
             track!(adaptation_field.write_to(&mut writer, adaptation_field_len))?;
@@ -71,7 +74,6 @@ impl TsPacket {
                 adaptation_field_len
             ))?;
         }
-
         track_io!(writer.write_all(&payload_buf[..payload_len]))?;
         Ok(())
     }
@@ -79,7 +81,7 @@ impl TsPacket {
 
 /// TS packet header.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TsHeader {
     pub transport_error_indicator: bool,
     pub transport_priority: bool,

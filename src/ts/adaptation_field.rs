@@ -8,7 +8,7 @@ use util;
 
 /// Adaptation field.
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AdaptationField {
     /// Set `true` if current TS packet is in a discontinuity state with respect to
     /// either the continuity counter or the program clock reference.
@@ -154,7 +154,7 @@ impl AdaptationField {
 
 /// Adaptation extension field.
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AdaptationExtensionField {
     pub legal_time_window: Option<LegalTimeWindow>,
     pub piecewise_rate: Option<PiecewiseRate>,
