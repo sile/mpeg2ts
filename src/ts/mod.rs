@@ -10,6 +10,7 @@ pub use self::pmt::{Descriptor, EsInfo};
 pub use self::reader::{ReadTsPacket, TsPacketReader};
 pub use self::types::{ContinuityCounter, LegalTimeWindow, Pid, PiecewiseRate, SeamlessSplice,
                       TransportScramblingControl, VersionNumber};
+pub use self::writer::{TsPacketWriter, WriteTsPacket};
 
 pub mod payload {
     //! Transport stream payloads.
@@ -30,3 +31,4 @@ mod pmt;
 mod psi;
 mod reader;
 mod types;
+mod writer;
