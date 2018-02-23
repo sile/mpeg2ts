@@ -2,6 +2,16 @@
 name = "mpeg2ts"
 version = "0.1.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+description = "MPEG2-TS decoding/encoding library"
+homepage = "https://github.com/sile/mpeg2ts"
+repository = "https://github.com/sile/mpeg2ts"
+readme = "README.md"
+keywords = ["mpeg2ts"]
+license = "MIT"
+
+[badges]
+travis-ci = {repository = "sile/mpeg2ts"}
+codecov = {repository = "sile/mpeg2ts"}
 
 [dependencies]
 byteorder = "1"
