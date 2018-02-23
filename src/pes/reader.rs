@@ -91,10 +91,10 @@ impl<R: ReadTsPacket> PesPacketReader<R> {
         }
     }
 
-    fn handle_raw_payload(&mut self, pid: Pid, data: Bytes) -> Result<Option<PesPacket<Vec<u8>>>> {
+    fn handle_raw_payload(&mut self, pid: Pid, data: &Bytes) -> Result<Option<PesPacket<Vec<u8>>>> {
         let mut partial =
             track_assert_some!(self.pes_packets.remove(&pid), ErrorKind::InvalidInput);
-        partial.packet.data.extend_from_slice(&data);
+        partial.packet.data.extend_from_slice(data);
         if Some(partial.packet.data.len()) == partial.data_len {
             Ok(Some(partial.packet))
         } else {
@@ -122,7 +122,7 @@ impl<R: ReadTsPacket> ReadPesPacket for PesPacketReader<R> {
             let pid = ts_packet.header.pid;
             let result = match ts_packet.payload {
                 Some(TsPayload::Pes(payload)) => track!(self.handle_pes_payload(pid, payload))?,
-                Some(TsPayload::Raw(payload)) => track!(self.handle_raw_payload(pid, payload))?,
+                Some(TsPayload::Raw(payload)) => track!(self.handle_raw_payload(pid, &payload))?,
                 _ => None,
             };
             if result.is_some() {

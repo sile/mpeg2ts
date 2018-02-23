@@ -42,7 +42,8 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
     fn read_ts_packet(&mut self) -> Result<Option<TsPacket>> {
         let mut reader = self.stream.by_ref().take(TsPacket::SIZE as u64);
         let mut peek = [0; 1];
-        if track_io!(reader.read(&mut peek))? == 0 {
+        let eos = track_io!(reader.read(&mut peek))? == 0;
+        if eos {
             return Ok(None);
         }
 

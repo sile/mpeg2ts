@@ -18,7 +18,8 @@ impl Psi {
         let mut tables = Vec::new();
         loop {
             let mut peek = [0];
-            if 0 == track_io!(reader.read(&mut peek))? {
+            let eos = track_io!(reader.read(&mut peek))? == 0;
+            if eos {
                 break;
             }
             if !tables.is_empty() && peek[0] == 0xFF {

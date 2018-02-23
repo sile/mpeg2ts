@@ -68,6 +68,7 @@ impl TsHeader {
 }
 
 /// TS packet payload.
+#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsPayload {
