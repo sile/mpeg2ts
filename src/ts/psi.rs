@@ -1,9 +1,9 @@
-use std::io::{Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
-use {ErrorKind, Result};
 use ts::VersionNumber;
 use util::{self, WithCrc32};
+use {ErrorKind, Result};
 
 const MAX_SYNTAX_SECTION_LEN: usize = 1021;
 

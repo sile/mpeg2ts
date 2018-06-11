@@ -25,7 +25,7 @@ macro_rules! track_io {
             use trackable::error::ErrorKindExt;
             track!(::Error::from(::ErrorKind::Other.cause(e)))
         })
-    }
+    };
 }
 
 pub mod es;

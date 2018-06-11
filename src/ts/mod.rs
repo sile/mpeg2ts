@@ -83,12 +83,10 @@ mod test {
             payload: Some(TsPayload::Pat(payload::Pat {
                 transport_stream_id: 0,
                 version_number: VersionNumber::from_u8(1).unwrap(),
-                table: vec![
-                    ProgramAssociation {
-                        program_num: 1,
-                        program_map_pid: Pid::new(480).unwrap(),
-                    },
-                ],
+                table: vec![ProgramAssociation {
+                    program_num: 1,
+                    program_map_pid: Pid::new(480).unwrap(),
+                }],
             })),
         }
     }

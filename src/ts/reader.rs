@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::io::Read;
 
-use {ErrorKind, Result};
-use ts::{AdaptationField, Pid, TsHeader, TsPacket, TsPayload};
 use ts::payload::{Bytes, Null, Pat, Pes, Pmt};
+use ts::{AdaptationField, Pid, TsHeader, TsPacket, TsPayload};
+use {ErrorKind, Result};
 
 /// The `ReadTsPacket` trait allows for reading TS packets from a source.
 pub trait ReadTsPacket {

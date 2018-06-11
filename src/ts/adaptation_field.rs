@@ -1,10 +1,10 @@
-use std::io::{Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
-use {ErrorKind, Result};
 use time::ClockReference;
 use ts::{LegalTimeWindow, PiecewiseRate, SeamlessSplice};
 use util;
+use {ErrorKind, Result};
 
 /// Adaptation field.
 #[allow(missing_docs)]

@@ -1,10 +1,10 @@
-use std::io::{Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
-use {ErrorKind, Result};
 use es::StreamId;
 use time::{ClockReference, Timestamp};
 use util;
+use {ErrorKind, Result};
 
 const PACKET_START_CODE_PREFIX: u64 = 0x00_0001;
 

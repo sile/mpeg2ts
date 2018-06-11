@@ -1,10 +1,10 @@
-use std::io::{Cursor, Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Cursor, Read, Write};
 
-use {ErrorKind, Result};
-use ts::{AdaptationField, ContinuityCounter, Pid, TransportScramblingControl};
-use ts::payload::{Bytes, Null, Pat, Pes, Pmt};
 use super::adaptation_field::AdaptationFieldControl;
+use ts::payload::{Bytes, Null, Pat, Pes, Pmt};
+use ts::{AdaptationField, ContinuityCounter, Pid, TransportScramblingControl};
+use {ErrorKind, Result};
 
 /// Transport stream packet.
 #[allow(missing_docs)]

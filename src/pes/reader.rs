@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use {ErrorKind, Result};
 use pes::PesPacket;
-use ts::{Pid, ReadTsPacket, TsPayload};
 use ts::payload::{Bytes, Pes};
+use ts::{Pid, ReadTsPacket, TsPayload};
+use {ErrorKind, Result};
 
 /// The `ReadPesPacket` trait allows for reading PES packets from a source.
 pub trait ReadPesPacket {

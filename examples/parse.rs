@@ -3,10 +3,10 @@ extern crate mpeg2ts;
 #[macro_use]
 extern crate trackable;
 
-use std::io::Write;
 use clap::{App, Arg};
 use mpeg2ts::pes::{PesPacketReader, ReadPesPacket};
 use mpeg2ts::ts::{ReadTsPacket, TsPacketReader, TsPacketWriter, WriteTsPacket};
+use std::io::Write;
 use trackable::error::Failure;
 
 fn main() {

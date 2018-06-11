@@ -1,7 +1,7 @@
 use std::io::Read;
 
-use Result;
 use ts::payload::Bytes;
+use Result;
 
 /// Payload for null packets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

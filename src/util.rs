@@ -1,8 +1,8 @@
 use std::io::{self, Read, Write};
 
-use {ErrorKind, Result};
 use crc::Crc32;
 use ts::TsPacket;
+use {ErrorKind, Result};
 
 pub fn consume_stuffing_bytes<R: Read>(mut reader: R) -> Result<()> {
     let mut buf = [0];

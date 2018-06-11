@@ -1,10 +1,10 @@
-use std::io::{Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
-use {ErrorKind, Result};
 use es::StreamType;
-use ts::{Pid, VersionNumber};
 use ts::psi::{Psi, PsiTable, PsiTableHeader, PsiTableSyntax};
+use ts::{Pid, VersionNumber};
+use {ErrorKind, Result};
 
 /// Program Map Table.
 #[allow(missing_docs)]

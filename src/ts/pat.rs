@@ -1,9 +1,9 @@
-use std::io::{Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
-use {ErrorKind, Result};
-use ts::{Pid, VersionNumber};
 use ts::psi::{Psi, PsiTable, PsiTableHeader, PsiTableSyntax};
+use ts::{Pid, VersionNumber};
+use {ErrorKind, Result};
 
 /// Payload for PAT(Program Association Table) packets.
 #[allow(missing_docs)]

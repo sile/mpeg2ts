@@ -1,8 +1,8 @@
 use std::io::{Read, Write};
 
-use Result;
 use pes::PesHeader;
 use ts::payload::Bytes;
+use Result;
 
 /// Payload for PES(Packetized elementary stream) packets.
 #[allow(missing_docs)]

@@ -1,6 +1,6 @@
 //! Time-related constituent elements.
-use std::io::{Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{Read, Write};
 
 use {ErrorKind, Result};
 
