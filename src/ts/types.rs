@@ -16,10 +16,10 @@ impl Pid {
     pub const MAX: u16 = (1 << 13) - 1;
 
     /// PID of the Program Association Table (PAT) packet.
-    pub const PAT: Pid = Pid(0);
+    pub const PAT: u16 = 0;
 
     /// PID of the null packet.
-    pub const NULL: Pid = Pid(0x1FFF);
+    pub const NULL: u16 = 0x1FFF;
 
     /// Makes a new `Pid` instance.
     ///

@@ -57,7 +57,7 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
         };
 
         let payload = if adaptation_field_control.has_payload() {
-            let payload = match header.pid {
+            let payload = match header.pid.as_u16() {
                 Pid::PAT => {
                     let pat = track!(Pat::read_from(&mut reader))?;
                     for pa in &pat.table {
@@ -69,9 +69,14 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
                     let null = track!(Null::read_from(&mut reader))?;
                     TsPayload::Null(null)
                 }
-                pid => {
+                0x01...0x1F | 0x1FFB => {
+                    // Unknown (unsupported) packets
+                    let bytes = track!(Bytes::read_from(&mut reader))?;
+                    TsPayload::Raw(bytes)
+                }
+                _ => {
                     let kind = track_assert_some!(
-                        self.pids.get(&pid).cloned(),
+                        self.pids.get(&header.pid).cloned(),
                         ErrorKind::InvalidInput,
                         "Unknown PID: header={:?}",
                         header
