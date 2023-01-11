@@ -154,8 +154,14 @@ impl ClockReference {
         let base1 = (base >> 15) & ((1 << 15) - 1);
         let base2 = base >> 30;
 
-        let n = marker | (extension << 1) | (marker << 10) | (base0 << 11) | (marker << 26)
-            | (base1 << 27) | (marker << 42) | (base2 << 43);
+        let n = marker
+            | (extension << 1)
+            | (marker << 10)
+            | (base0 << 11)
+            | (marker << 26)
+            | (base1 << 27)
+            | (marker << 42)
+            | (base2 << 43);
         track_io!(writer.write_uint::<BigEndian>(n, 6))?;
         Ok(())
     }

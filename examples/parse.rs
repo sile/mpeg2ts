@@ -45,11 +45,9 @@ fn main() {
                 if !packet.header.stream_id.is_audio() {
                     continue;
                 }
-                track_try_unwrap!(
-                    std::io::stdout()
-                        .write_all(&packet.data)
-                        .map_err(Failure::from_error)
-                );
+                track_try_unwrap!(std::io::stdout()
+                    .write_all(&packet.data)
+                    .map_err(Failure::from_error));
             }
         }
         "es-video" => {
@@ -58,11 +56,9 @@ fn main() {
                 if !packet.header.stream_id.is_video() {
                     continue;
                 }
-                track_try_unwrap!(
-                    std::io::stdout()
-                        .write_all(&packet.data)
-                        .map_err(Failure::from_error)
-                );
+                track_try_unwrap!(std::io::stdout()
+                    .write_all(&packet.data)
+                    .map_err(Failure::from_error));
             }
         }
         _ => unreachable!(),

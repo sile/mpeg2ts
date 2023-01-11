@@ -131,8 +131,10 @@ impl PsiTableHeader {
 
         track_io!(writer.write_u8(self.table_id))?;
 
-        let n = (((syntax_section_len != 0) as u16) << 15) | ((self.private_bit as u16) << 14)
-            | 0b0011_0000_0000_0000 | syntax_section_len as u16;
+        let n = (((syntax_section_len != 0) as u16) << 15)
+            | ((self.private_bit as u16) << 14)
+            | 0b0011_0000_0000_0000
+            | syntax_section_len as u16;
         track_io!(writer.write_u16::<BigEndian>(n))?;
 
         Ok(())

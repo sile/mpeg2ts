@@ -33,7 +33,8 @@ impl TsPacket {
             0
         };
 
-        let required_len = self.adaptation_field
+        let required_len = self
+            .adaptation_field
             .as_ref()
             .map_or(0, |a| a.external_size());
         let free_len = TsPacket::SIZE - 4 - payload_len;
@@ -131,7 +132,8 @@ impl TsHeader {
 
         let n = ((self.transport_error_indicator as u16) << 15)
             | ((payload_unit_start_indicator as u16) << 14)
-            | ((self.transport_priority as u16) << 13) | self.pid.as_u16();
+            | ((self.transport_priority as u16) << 13)
+            | self.pid.as_u16();
         track_io!(writer.write_u16::<BigEndian>(n))?;
 
         let n = ((self.transport_scrambling_control as u8) << 6)

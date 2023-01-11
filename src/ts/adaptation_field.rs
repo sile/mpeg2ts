@@ -126,7 +126,8 @@ impl AdaptationField {
         let n = ((self.discontinuity_indicator as u8) << 7)
             | ((self.random_access_indicator as u8) << 6)
             | ((self.es_priority_indicator as u8) << 5)
-            | ((self.pcr.is_some() as u8) << 4) | ((self.opcr.is_some() as u8) << 3)
+            | ((self.pcr.is_some() as u8) << 4)
+            | ((self.opcr.is_some() as u8) << 3)
             | ((self.splice_countdown.is_some() as u8) << 2)
             | (((!self.transport_private_data.is_empty()) as u8) << 1)
             | self.extension.is_some() as u8;

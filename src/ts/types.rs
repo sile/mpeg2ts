@@ -403,10 +403,9 @@ impl SeamlessSplice {
     }
 
     pub(super) fn write_to<W: Write>(&self, mut writer: W) -> Result<()> {
-        track!(
-            self.dts_next_access_unit
-                .write_to(&mut writer, self.splice_type)
-        )?;
+        track!(self
+            .dts_next_access_unit
+            .write_to(&mut writer, self.splice_type))?;
         Ok(())
     }
 }

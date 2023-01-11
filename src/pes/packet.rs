@@ -128,15 +128,18 @@ impl PesHeader {
         track_io!(writer.write_u8(self.stream_id.as_u8()))?;
         track_io!(writer.write_u16::<BigEndian>(pes_header_len))?;
 
-        let n = 0b1000_0000 | ((self.priority as u8) << 3)
+        let n = 0b1000_0000
+            | ((self.priority as u8) << 3)
             | ((self.data_alignment_indicator as u8) << 2)
-            | ((self.copyright as u8) << 1) | self.original_or_copy as u8;
+            | ((self.copyright as u8) << 1)
+            | self.original_or_copy as u8;
         track_io!(writer.write_u8(n))?;
 
         if self.dts.is_some() {
             track_assert!(self.pts.is_some(), ErrorKind::InvalidInput);
         }
-        let n = ((self.pts.is_some() as u8) << 7) | ((self.dts.is_some() as u8) << 6)
+        let n = ((self.pts.is_some() as u8) << 7)
+            | ((self.dts.is_some() as u8) << 6)
             | ((self.escr.is_some() as u8) << 5);
         track_io!(writer.write_u8(n))?;
 
