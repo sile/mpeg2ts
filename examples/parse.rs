@@ -1,25 +1,27 @@
-extern crate clap;
-extern crate mpeg2ts;
 #[macro_use]
 extern crate trackable;
 
-use clap::{App, Arg};
+use clap::Parser;
 use mpeg2ts::pes::{PesPacketReader, ReadPesPacket};
 use mpeg2ts::ts::{ReadTsPacket, TsPacketReader, TsPacketWriter, WriteTsPacket};
 use std::io::Write;
 use trackable::error::Failure;
 
-fn main() {
-    let matches = App::new("parse")
-        .arg(
-            Arg::with_name("OUTPUT_TYPE")
-                .long("output-type")
-                .takes_value(true)
-                .possible_values(&["ts", "ts-packet", "pes-packet", "es-audio", "es-video"])
-                .default_value("ts-packet"),
+#[derive(Debug, Parser)]
+struct Args {
+    #[arg(
+        long,
+        default_value="ts-packet",
+        value_parser = clap::builder::PossibleValuesParser::new(
+            ["ts", "ts-packet", "pes-packet", "es-audio", "es-video"]
         )
-        .get_matches();
-    match matches.value_of("OUTPUT_TYPE").unwrap() {
+    )]
+    output_type: String,
+}
+
+fn main() {
+    let args = Args::parse();
+    match args.output_type.as_str() {
         "ts" => {
             let mut writer = TsPacketWriter::new(std::io::stdout());
             let mut reader = TsPacketReader::new(std::io::stdin());

@@ -15,4 +15,4 @@ byteorder = "1"
 trackable = "1"
 
 [dev-dependencies]
-clap = "2"
+clap = { version = "4", features = ["derive"] }
