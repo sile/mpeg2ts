@@ -1,8 +1,7 @@
 //! Time-related constituent elements.
+use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
-
-use {ErrorKind, Result};
 
 /// Timestamp type for PTS/DTS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

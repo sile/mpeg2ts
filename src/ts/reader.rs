@@ -1,9 +1,8 @@
+use crate::ts::payload::{Bytes, Null, Pat, Pes, Pmt};
+use crate::ts::{AdaptationField, Pid, TsHeader, TsPacket, TsPayload};
+use crate::{ErrorKind, Result};
 use std::collections::HashMap;
 use std::io::Read;
-
-use ts::payload::{Bytes, Null, Pat, Pes, Pmt};
-use ts::{AdaptationField, Pid, TsHeader, TsPacket, TsPayload};
-use {ErrorKind, Result};
 
 /// The `ReadTsPacket` trait allows for reading TS packets from a source.
 pub trait ReadTsPacket {
@@ -69,7 +68,7 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
                     let null = track!(Null::read_from(&mut reader))?;
                     TsPayload::Null(null)
                 }
-                0x01...0x1F | 0x1FFB => {
+                0x01..=0x1F | 0x1FFB => {
                     // Unknown (unsupported) packets
                     let bytes = track!(Bytes::read_from(&mut reader))?;
                     TsPayload::Raw(bytes)

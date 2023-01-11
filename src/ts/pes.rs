@@ -1,8 +1,7 @@
+use crate::pes::PesHeader;
+use crate::ts::payload::Bytes;
+use crate::Result;
 use std::io::{Read, Write};
-
-use pes::PesHeader;
-use ts::payload::Bytes;
-use Result;
 
 /// Payload for PES(Packetized elementary stream) packets.
 #[allow(missing_docs)]

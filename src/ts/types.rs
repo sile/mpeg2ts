@@ -1,12 +1,11 @@
+use crate::time::Timestamp;
+use crate::ts::TsPacket;
+use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::ops::Deref;
-
-use time::Timestamp;
-use ts::TsPacket;
-use {ErrorKind, Result};
 
 /// Packet Identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

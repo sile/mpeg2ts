@@ -1,4 +1,4 @@
-use {ErrorKind, Result};
+use crate::{ErrorKind, Result};
 
 /// Elementary stream type.
 #[allow(missing_docs)]

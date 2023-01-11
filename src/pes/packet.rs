@@ -1,10 +1,9 @@
+use crate::es::StreamId;
+use crate::time::{ClockReference, Timestamp};
+use crate::util;
+use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
-
-use es::StreamId;
-use time::{ClockReference, Timestamp};
-use util;
-use {ErrorKind, Result};
 
 const PACKET_START_CODE_PREFIX: u64 = 0x00_0001;
 

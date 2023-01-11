@@ -1,7 +1,6 @@
+use crate::ts::TsPacket;
+use crate::Result;
 use std::io::Write;
-use ts::TsPacket;
-
-use Result;
 
 /// The `ReadTsPacket` trait allows for writing TS packets to a destination.
 pub trait WriteTsPacket {

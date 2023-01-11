@@ -1,4 +1,4 @@
-use {ErrorKind, Result};
+use crate::{ErrorKind, Result};
 
 /// Stream identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

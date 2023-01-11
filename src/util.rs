@@ -1,8 +1,7 @@
+use crate::crc::Crc32;
+use crate::ts::TsPacket;
+use crate::{ErrorKind, Result};
 use std::io::{self, Read, Write};
-
-use crc::Crc32;
-use ts::TsPacket;
-use {ErrorKind, Result};
 
 pub fn consume_stuffing_bytes<R: Read>(mut reader: R) -> Result<()> {
     let mut buf = [0];

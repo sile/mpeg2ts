@@ -1,10 +1,9 @@
+use crate::es::StreamType;
+use crate::ts::psi::{Psi, PsiTable, PsiTableHeader, PsiTableSyntax};
+use crate::ts::{Pid, VersionNumber};
+use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
-
-use es::StreamType;
-use ts::psi::{Psi, PsiTable, PsiTableHeader, PsiTableSyntax};
-use ts::{Pid, VersionNumber};
-use {ErrorKind, Result};
 
 /// Program Map Table.
 #[allow(missing_docs)]

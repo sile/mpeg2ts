@@ -1,9 +1,8 @@
+use crate::ts::VersionNumber;
+use crate::util::{self, WithCrc32};
+use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
-
-use ts::VersionNumber;
-use util::{self, WithCrc32};
-use {ErrorKind, Result};
 
 const MAX_SYNTAX_SECTION_LEN: usize = 1021;
 

@@ -1,7 +1,6 @@
+use crate::ts::payload::Bytes;
+use crate::Result;
 use std::io::Read;
-
-use ts::payload::Bytes;
-use Result;
 
 /// Payload for null packets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
