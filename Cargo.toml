@@ -9,10 +9,6 @@ readme = "README.md"
 keywords = ["mpeg2ts"]
 license = "MIT"
 
-[badges]
-travis-ci = {repository = "sile/mpeg2ts"}
-codecov = {repository = "sile/mpeg2ts"}
-
 [dependencies]
 byteorder = "1"
 trackable = "0.2"

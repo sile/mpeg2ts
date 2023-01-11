@@ -3,8 +3,7 @@ mpeg2ts
 
 [![mpeg2ts](https://img.shields.io/crates/v/mpeg2ts.svg)](https://crates.io/crates/mpeg2ts)
 [![Documentation](https://docs.rs/mpeg2ts/badge.svg)](https://docs.rs/mpeg2ts)
-[![Build Status](https://travis-ci.org/sile/mpeg2ts.svg?branch=master)](https://travis-ci.org/sile/mpeg2ts)
-[![Code Coverage](https://codecov.io/gh/sile/mpeg2ts/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/mpeg2ts/branch/master)
+[![Actions Status](https://github.com/sile/mpeg2ts/workflows/CI/badge.svg)](https://github.com/sile/mpeg2ts/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 MPEG2-TS decoding/encoding library for Rust.
