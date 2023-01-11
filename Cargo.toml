@@ -11,7 +11,7 @@ license = "MIT"
 
 [dependencies]
 byteorder = "1"
-trackable = "0.2"
+trackable = "1"
 
 [dev-dependencies]
 clap = "2"
