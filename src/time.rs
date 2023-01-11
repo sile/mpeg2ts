@@ -119,7 +119,7 @@ impl ClockReference {
 
     pub(crate) fn write_pcr_to<W: Write>(&self, mut writer: W) -> Result<()> {
         let base = self.0 / 300;
-        let extension = self.0 & 0b1_1111_1111;
+        let extension = self.0 % 300;
 
         let n = (base << 15) | extension;
         track_io!(writer.write_uint::<BigEndian>(n, 6))?;
@@ -147,7 +147,7 @@ impl ClockReference {
 
     pub(crate) fn write_escr_to<W: Write>(&self, mut writer: W) -> Result<()> {
         let base = self.0 / 300;
-        let extension = self.0 & 0b1_1111_1111;
+        let extension = self.0 % 300;
 
         let marker = 1;
         let base0 = base & ((1 << 15) - 1);
@@ -168,5 +168,28 @@ impl From<u32> for ClockReference {
 impl From<Timestamp> for ClockReference {
     fn from(f: Timestamp) -> Self {
         ClockReference(f.0 * 300)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn pcr_conversion() {
+        let cr = ClockReference::new(10000).unwrap();
+        let mut buf = Vec::new();
+        cr.write_pcr_to(&mut buf).unwrap();
+        let new_cr = ClockReference::read_pcr_from(&buf[..]).unwrap();
+        assert_eq!(cr, new_cr);
+    }
+
+    #[test]
+    fn escr_conversion() {
+        let cr = ClockReference::new(10000).unwrap();
+        let mut buf = Vec::new();
+        cr.write_escr_to(&mut buf).unwrap();
+        let new_cr = ClockReference::read_escr_from(&buf[..]).unwrap();
+        assert_eq!(cr, new_cr);
     }
 }
