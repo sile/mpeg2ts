@@ -40,7 +40,7 @@ impl<R: ReadTsPacket> PesPacketReader<R> {
     }
 
     fn handle_eos(&mut self) -> Result<Option<PesPacket<Vec<u8>>>> {
-        if let Some(key) = self.pes_packets.keys().nth(0).cloned() {
+        if let Some(key) = self.pes_packets.keys().next().cloned() {
             let partial = self.pes_packets.remove(&key).expect("Never fails");
             track_assert!(
                 partial.data_len.is_none() || partial.data_len == Some(partial.packet.data.len()),
@@ -68,7 +68,7 @@ impl<R: ReadTsPacket> PesPacketReader<R> {
             Some((pes.pes_packet_len - optional_header_len) as usize)
         };
 
-        let mut data = Vec::with_capacity(data_len.unwrap_or_else(|| pes.data.len()));
+        let mut data = Vec::with_capacity(data_len.unwrap_or(pes.data.len()));
         data.extend_from_slice(&pes.data);
 
         let packet = PesPacket {

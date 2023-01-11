@@ -193,7 +193,7 @@ impl Bytes {
 
         let len = bytes.len();
         let mut buf = [0; Self::MAX_SIZE];
-        (&mut buf[..len]).copy_from_slice(bytes);
+        buf[..len].copy_from_slice(bytes);
         Ok(Bytes { buf, len })
     }
 

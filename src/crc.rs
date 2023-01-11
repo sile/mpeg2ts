@@ -1,4 +1,4 @@
-#[cfg_attr(feature = "cargo-clippy", allow(unreadable_literal))]
+#[allow(clippy::unreadable_literal)]
 pub const CRC32_TABLE: &[u32] = &[
     0x00000000, 0xB71DC104, 0x6E3B8209, 0xD926430D, 0xDC760413, 0x6B6BC517, 0xB24D861A, 0x0550471E,
     0xB8ED0826, 0x0FF0C922, 0xD6D68A2F, 0x61CB4B2B, 0x649B0C35, 0xD386CD31, 0x0AA08E3C, 0xBDBD4F38,

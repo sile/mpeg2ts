@@ -54,10 +54,10 @@ impl TsPacket {
             (false, true) => AdaptationFieldControl::PayloadOnly,
             (false, false) => track_panic!(ErrorKind::InvalidInput, "Reserved for future use"),
         };
-        let payload_unit_start_indicator = match self.payload {
-            Some(TsPayload::Raw(_)) | Some(TsPayload::Null(_)) | None => false,
-            _ => true,
-        };
+        let payload_unit_start_indicator = !matches!(
+            self.payload,
+            Some(TsPayload::Raw(_)) | Some(TsPayload::Null(_)) | None
+        );
         track!(self.header.write_to(
             &mut writer,
             adaptation_field_control,
@@ -145,8 +145,7 @@ impl TsHeader {
 }
 
 /// TS packet payload.
-#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsPayload {
     Pat(Pat),

@@ -28,7 +28,7 @@ impl StreamId {
     /// If `id` is not between `AUDIO_MIN` and `AUDIO_MAX`, it will return an `ErrorKind::InvalidInput` error.
     pub fn new_audio(id: u8) -> Result<Self> {
         track_assert!(
-            Self::AUDIO_MIN <= id && id <= Self::AUDIO_MAX,
+            (Self::AUDIO_MIN..=Self::AUDIO_MAX).contains(&id),
             ErrorKind::InvalidInput,
             "Not an audio ID: {}",
             id
@@ -43,7 +43,7 @@ impl StreamId {
     /// If `id` is not between `VIDEO_MIN` and `VIDEO_MAX`, it will return an `ErrorKind::InvalidInput` error.
     pub fn new_video(id: u8) -> Result<Self> {
         track_assert!(
-            Self::VIDEO_MIN <= id && id <= Self::VIDEO_MAX,
+            (Self::VIDEO_MIN..=Self::VIDEO_MAX).contains(&id),
             ErrorKind::InvalidInput,
             "Not a video ID: {}",
             id
