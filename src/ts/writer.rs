@@ -2,7 +2,7 @@ use crate::ts::TsPacket;
 use crate::Result;
 use std::io::Write;
 
-/// The `ReadTsPacket` trait allows for writing TS packets to a destination.
+/// The `WriteTsPacket` trait allows for writing TS packets to a destination.
 pub trait WriteTsPacket {
     /// Writes a TS packet.
     fn write_ts_packet(&mut self, packet: &TsPacket) -> Result<()>;
