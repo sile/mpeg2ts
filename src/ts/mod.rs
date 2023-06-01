@@ -96,7 +96,6 @@ mod test {
 
     #[test]
     fn pmt() {
-        dbg!(pmt_packet_bytes().len());
         let mut bytes = Vec::new();
         bytes.extend(pat_packet_bytes());
         bytes.extend(pmt_packet_bytes());
@@ -107,7 +106,8 @@ mod test {
         track_try_unwrap!(writer.write_ts_packet(&packet));
 
         let packet = track_try_unwrap!(reader.read_ts_packet()).unwrap();
-        assert_eq!(packet, pmt_packet());
+        assert_eq!(packet.header, pmt_packet().header);
+        assert_eq!(packet.payload, pmt_packet().payload);
         track_try_unwrap!(writer.write_ts_packet(&packet));
 
         let mut reader = TsPacketReader::new(&writer.stream()[..]);
