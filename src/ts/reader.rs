@@ -83,7 +83,7 @@ impl<R: Read> ReadTsPacket for TsPacketReader<R> {
                     match kind {
                         PidKind::Pmt => {
                             let pmt = track!(Pmt::read_from(&mut reader))?;
-                            for es in &pmt.table {
+                            for es in &pmt.es_info {
                                 self.pids.insert(es.elementary_pid, PidKind::Pes);
                             }
                             TsPayload::Pmt(pmt)

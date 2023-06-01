@@ -18,7 +18,8 @@ pub struct Pmt {
     pub pcr_pid: Option<Pid>,
 
     pub version_number: VersionNumber,
-    pub table: Vec<EsInfo>,
+    pub program_info: Vec<Descriptor>,
+    pub es_info: Vec<EsInfo>,
 }
 impl Pmt {
     const TABLE_ID: u8 = 2;
@@ -60,17 +61,22 @@ impl Pmt {
             "Unexpected program info length unused bits"
         );
         let program_info_len = n & 0b0000_0011_1111_1111;
-        track_assert_eq!(program_info_len, 0, ErrorKind::Unsupported);
+        let mut program_info = Vec::new();
+        let (mut program_info_reader, mut reader) = reader.split_at(program_info_len as usize);
+        while !program_info_reader.is_empty() {
+            program_info.push(track!(Descriptor::read_from(&mut program_info_reader))?);
+        }
 
-        let mut table = Vec::new();
+        let mut es_info = Vec::new();
         while !reader.is_empty() {
-            table.push(track!(EsInfo::read_from(&mut reader))?);
+            es_info.push(track!(EsInfo::read_from(&mut reader))?);
         }
         Ok(Pmt {
             program_num: syntax.table_id_extension,
             pcr_pid,
             version_number: syntax.version_number,
-            table,
+            program_info,
+            es_info,
         })
     }
 
@@ -87,10 +93,24 @@ impl Pmt {
             track_io!(table_data.write_u16::<BigEndian>(0xFFFF))?;
         }
 
-        let n = 0b1111_0000_0000_0000;
+        let program_info_len: usize = self
+            .program_info
+            .iter()
+            .map(|desc| desc.data.len() + 2)
+            .sum();
+        track_assert!(
+            program_info_len <= 0b0000_0011_1111_1111,
+            ErrorKind::InvalidInput,
+            "program info length too large"
+        );
+        let n = 0b1111_0000_0000_0000 | program_info_len as u16;
         track_io!(table_data.write_u16::<BigEndian>(n))?;
 
-        for info in &self.table {
+        for desc in &self.program_info {
+            track!(desc.write_to(&mut table_data))?;
+        }
+
+        for info in &self.es_info {
             track!(info.write_to(&mut table_data))?;
         }
 
