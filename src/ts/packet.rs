@@ -1,5 +1,5 @@
 use super::adaptation_field::AdaptationFieldControl;
-use crate::ts::payload::{Bytes, Null, Pat, Pes, Pmt};
+use crate::ts::payload::{Bytes, Null, Pat, Pes, Pmt, Section};
 use crate::ts::{AdaptationField, ContinuityCounter, Pid, TransportScramblingControl};
 use crate::{ErrorKind, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -151,6 +151,7 @@ pub enum TsPayload {
     Pat(Pat),
     Pmt(Pmt),
     Pes(Pes),
+    Section(Section),
     Null(Null),
     Raw(Bytes),
 }
@@ -160,6 +161,7 @@ impl TsPayload {
             TsPayload::Pat(ref x) => track!(x.write_to(writer)),
             TsPayload::Pmt(ref x) => track!(x.write_to(writer)),
             TsPayload::Pes(ref x) => track!(x.write_to(writer)),
+            TsPayload::Section(ref x) => track!(x.write_to(writer)),
             TsPayload::Null(_) => Ok(()),
             TsPayload::Raw(ref x) => track!(x.write_to(writer)),
         }

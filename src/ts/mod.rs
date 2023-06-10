@@ -21,6 +21,7 @@ pub mod payload {
     pub use super::pat::Pat;
     pub use super::pes::Pes;
     pub use super::pmt::Pmt;
+    pub use super::section::Section;
     pub use super::types::Bytes;
 }
 
@@ -32,6 +33,7 @@ mod pes;
 mod pmt;
 mod psi;
 mod reader;
+mod section;
 mod types;
 mod writer;
 
