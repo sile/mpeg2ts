@@ -39,7 +39,9 @@ impl AdaptationField {
         if self.splice_countdown.is_some() {
             n += 1;
         }
-        n += self.transport_private_data.len();
+        if !self.transport_private_data.is_empty() {
+            n += 1 /* transport_private_data_length */ + self.transport_private_data.len();
+        }
         if let Some(ref x) = self.extension {
             n += x.external_size();
         }
@@ -136,6 +138,17 @@ impl AdaptationField {
         }
         if let Some(x) = self.splice_countdown {
             writer.write_i8(x)?;
+        }
+        if !self.transport_private_data.is_empty() {
+            let len = self.transport_private_data.len();
+            if len > u8::MAX as usize {
+                return Err(Error::invalid_input(format!(
+                    "Too large transport private data: {} bytes, max {} bytes",
+                    len,
+                    u8::MAX
+                )));
+            }
+            writer.write_u8(len as u8)?;
         }
         writer.write_all(&self.transport_private_data)?;
         if let Some(ref x) = self.extension {
