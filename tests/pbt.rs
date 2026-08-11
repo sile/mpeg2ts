@@ -11,9 +11,13 @@
 //! - Stateful PES reassembly: logical PES packets split across an arbitrary
 //!   number of TS packets (start + continuations, interleaved with null
 //!   packets) must be reassembled by `PesPacketReader` into exactly the
-//!   generated packets.
+//!   generated packets. Covers bounded and unbounded (`PES_packet_length
+//!   = 0`) packets, and streams that multiplex two PIDs so partial packets
+//!   for both PIDs are pending simultaneously.
 //! - Error handling: unknown PID, truncated streams, a PES length shorter
-//!   than its optional header, and DTS without PTS are all rejected.
+//!   than its optional header, data exceeding the declared PES length, a
+//!   continuation without a pending start, and DTS without PTS (both on
+//!   write and, via hand-crafted bytes, on read) are all rejected.
 //! - Feedback-guided reassembly: semantic buckets (total PES data length
 //!   band, TS packet count band) steer the search toward the corners that
 //!   uniform sampling would under-explore.
@@ -59,7 +63,16 @@ fn run<F>(f: F) -> noprop::TestResult
 where
     F: Fn(&mut TestCaseContext) -> noprop::TestResult,
 {
-    noprop::Runner::new(seed()?).run(CASES, f)?;
+    let mut runner = noprop::Runner::new(seed()?);
+    runner.run(CASES, f)?;
+    // All generators are valid-by-construction, so any case rejection
+    // indicates a generator bug (e.g. a draw that violates a SUT
+    // precondition and would silently shrink the explored space).
+    let stats = runner.stats();
+    assert_eq!(
+        stats.rejected_cases, 0,
+        "valid-by-construction generators must not reject cases"
+    );
     Ok(())
 }
 
@@ -147,7 +160,15 @@ fn sample_stream_type(ctx: &mut TestCaseContext) -> StreamType {
 }
 
 fn sample_pes_header(ctx: &mut TestCaseContext) -> PesHeader {
-    let stream_id = if noprop::sample_bool(ctx) {
+    let audio = noprop::sample_bool(ctx);
+    sample_pes_header_with_stream_kind(ctx, audio)
+}
+
+/// Like `sample_pes_header`, but with the stream id restricted to the
+/// audio (`audio = true`) or video range so callers can build streams whose
+/// packets are identifiable by stream id (e.g. one PES stream per PID).
+fn sample_pes_header_with_stream_kind(ctx: &mut TestCaseContext, audio: bool) -> PesHeader {
+    let stream_id = if audio {
         StreamId::new_audio(noprop::sample_usize_in(
             ctx,
             usize::from(StreamId::AUDIO_MIN)..=usize::from(StreamId::AUDIO_MAX),
@@ -462,11 +483,82 @@ struct LogicalPes {
     header: PesHeader,
     data: Vec<u8>,
     n_ts_packets: usize,
+    /// `true` when the packet was written with `PES_packet_length = 0`
+    /// (the unbounded encoding).
+    unbounded: bool,
+}
+
+/// Writes one logical PES packet as a start TS packet plus continuation
+/// packets with arbitrary chunk sizes, incrementing `cc` per PID. Returns
+/// the number of TS packets written for the logical packet. When `unbounded`
+/// is set, `PES_packet_length` is written as 0 so the packet completes only
+/// at the next PES start on the same PID or at end of stream.
+fn write_logical_pes(
+    writer: &mut TsPacketWriter<Vec<u8>>,
+    pid: Pid,
+    header: &PesHeader,
+    data: &[u8],
+    unbounded: bool,
+    cc: &mut u8,
+    ctx: &mut TestCaseContext,
+) -> usize {
+    let start_capacity = 184 - pes_header_bytes(header);
+    let pes_packet_len = if unbounded {
+        0
+    } else {
+        pes_packet_length(header, data.len())
+    };
+    let chunk0 = if data.is_empty() {
+        0
+    } else {
+        noprop::sample_with_boundaries(
+            ctx,
+            &[1usize, start_capacity],
+            noprop::Ratio::one_nth(4),
+            |ctx| noprop::sample_usize_in(ctx, 1..=start_capacity),
+        )
+        .min(data.len())
+    };
+    let start = Pes {
+        header: header.clone(),
+        pes_packet_len,
+        data: Bytes::new(&data[..chunk0]).expect("chunk0 fits in a TS payload"),
+    };
+    writer
+        .write_ts_packet(&packet_with_cc(
+            pid.as_u16(),
+            TsPayload::PesStart(start),
+            cc,
+        ))
+        .expect("PES start write");
+    let mut n_ts_packets = 1;
+    let mut offset = chunk0;
+    while offset < data.len() {
+        let remaining = data.len() - offset;
+        let chunk =
+            noprop::sample_with_boundaries(ctx, &[1usize, 184], noprop::Ratio::one_nth(4), |ctx| {
+                noprop::sample_usize_in(ctx, 1..=184)
+            })
+            .min(remaining);
+        let continuation =
+            Bytes::new(&data[offset..offset + chunk]).expect("continuation fits in a TS payload");
+        writer
+            .write_ts_packet(&packet_with_cc(
+                pid.as_u16(),
+                TsPayload::PesContinuation(continuation),
+                cc,
+            ))
+            .expect("PES continuation write");
+        offset += chunk;
+        n_ts_packets += 1;
+    }
+    n_ts_packets
 }
 
 /// Generates a TS stream of PAT + PMT + `n_logical` PES packets split into
-/// arbitrary chunks, with occasional null packets interleaved. Returns the
-/// written bytes and the expected logical PES packets.
+/// arbitrary chunks on a single PID, with occasional null packets
+/// interleaved and occasional unbounded (`PES_packet_length = 0`) packets.
+/// Returns the written bytes and the expected logical PES packets.
 fn generate_reassembly_stream(ctx: &mut TestCaseContext) -> (Vec<u8>, Vec<LogicalPes>) {
     let pids = sample_pids(ctx, 2);
     let n_logical =
@@ -485,7 +577,6 @@ fn generate_reassembly_stream(ctx: &mut TestCaseContext) -> (Vec<u8>, Vec<Logica
     let mut logical = Vec::new();
     for _ in 0..n_logical {
         let header = sample_pes_header(ctx);
-        let start_capacity = 184 - pes_header_bytes(&header);
         let data_len = noprop::sample_with_boundaries(
             ctx,
             &[0usize, 1, MAX_PES_DATA],
@@ -493,61 +584,69 @@ fn generate_reassembly_stream(ctx: &mut TestCaseContext) -> (Vec<u8>, Vec<Logica
             |ctx| noprop::sample_usize_in(ctx, 0..=MAX_PES_DATA),
         );
         let data = noprop::sample_bytes_vec(ctx, data_len);
-        let chunk0 = if data.is_empty() {
-            0
-        } else {
-            noprop::sample_with_boundaries(
-                ctx,
-                &[1usize, start_capacity],
-                noprop::Ratio::one_nth(4),
-                |ctx| noprop::sample_usize_in(ctx, 1..=start_capacity),
-            )
-            .min(data.len())
-        };
-        let start = Pes {
-            header: header.clone(),
-            pes_packet_len: pes_packet_length(&header, data.len()),
-            data: Bytes::new(&data[..chunk0]).expect("chunk0 fits in a TS payload"),
-        };
-        writer
-            .write_ts_packet(&packet_with_cc(
-                pids[1].as_u16(),
-                TsPayload::PesStart(start),
-                &mut cc,
-            ))
-            .expect("PES start write");
-        let mut n_ts_packets = 1;
-        let mut offset = chunk0;
-        while offset < data.len() {
-            let remaining = data.len() - offset;
-            let chunk = noprop::sample_with_boundaries(
-                ctx,
-                &[1usize, 184],
-                noprop::Ratio::one_nth(4),
-                |ctx| noprop::sample_usize_in(ctx, 1..=184),
-            )
-            .min(remaining);
-            let continuation = Bytes::new(&data[offset..offset + chunk])
-                .expect("continuation fits in a TS payload");
+        let unbounded = noprop::sample_ratio(ctx, noprop::Ratio::new(1, 6));
+        let n_ts_packets = write_logical_pes(
+            &mut writer,
+            pids[1],
+            &header,
+            &data,
+            unbounded,
+            &mut cc,
+            ctx,
+        );
+        if noprop::sample_ratio(ctx, noprop::Ratio::new(1, 5)) {
             writer
-                .write_ts_packet(&packet_with_cc(
-                    pids[1].as_u16(),
-                    TsPayload::PesContinuation(continuation),
-                    &mut cc,
-                ))
-                .expect("PES continuation write");
-            offset += chunk;
-            n_ts_packets += 1;
-            if noprop::sample_ratio(ctx, noprop::Ratio::new(1, 5)) {
-                writer
-                    .write_ts_packet(&packet_with(0x1FFF, TsPayload::Null(Null)))
-                    .expect("null write");
-            }
+                .write_ts_packet(&packet_with(0x1FFF, TsPayload::Null(Null)))
+                .expect("null write");
         }
         logical.push(LogicalPes {
             header,
             data,
             n_ts_packets,
+            unbounded,
+        });
+    }
+    (writer.into_stream(), logical)
+}
+
+/// Generates a TS stream of PAT + PMT + alternating PES packets on two
+/// PIDs, so partial packets for both PIDs are pending at the reader at the
+/// same time. The audio stream uses audio stream ids and the video stream
+/// uses video stream ids, which makes returned packets attributable to
+/// their PID.
+fn generate_multipid_stream(ctx: &mut TestCaseContext) -> (Vec<u8>, Vec<LogicalPes>) {
+    let pids = sample_pids(ctx, 3);
+    let n_logical =
+        noprop::sample_with_boundaries(ctx, &[2usize, 8], noprop::Ratio::one_nth(4), |ctx| {
+            noprop::sample_usize_in(ctx, 2..=8)
+        });
+    let mut writer = TsPacketWriter::new(Vec::new());
+    writer
+        .write_ts_packet(&packet_with(0, TsPayload::Pat(single_program_pat(pids[0]))))
+        .expect("PAT write");
+    let pmt = sample_pmt_with_es(ctx, &[pids[1], pids[2]]);
+    writer
+        .write_ts_packet(&packet_with(pids[0].as_u16(), TsPayload::Pmt(pmt)))
+        .expect("PMT write");
+    let mut cc = 0u8;
+    let mut logical = Vec::new();
+    for i in 0..n_logical {
+        let audio = i % 2 == 0;
+        let header = sample_pes_header_with_stream_kind(ctx, audio);
+        let data_len = noprop::sample_with_boundaries(
+            ctx,
+            &[0usize, 1, MAX_PES_DATA],
+            noprop::Ratio::one_nth(4),
+            |ctx| noprop::sample_usize_in(ctx, 0..=MAX_PES_DATA),
+        );
+        let data = noprop::sample_bytes_vec(ctx, data_len);
+        let pid = if audio { pids[1] } else { pids[2] };
+        let n_ts_packets = write_logical_pes(&mut writer, pid, &header, &data, false, &mut cc, ctx);
+        logical.push(LogicalPes {
+            header,
+            data,
+            n_ts_packets,
+            unbounded: false,
         });
     }
     (writer.into_stream(), logical)
@@ -578,7 +677,6 @@ fn verify_reassembly(bytes: &[u8], logical: &[LogicalPes]) -> noprop::TestResult
     }
     Ok(())
 }
-
 // --- Full TS packet round-trip --------------------------------------
 
 #[test]
@@ -660,6 +758,111 @@ fn ts_packet_roundtrip_matches_write() -> noprop::TestResult {
     );
     assert!(saw_extension.get(), "no case wrote an adaptation extension");
     Ok(())
+}
+
+// --- Payload-only and null packets -----------------------------------
+
+#[test]
+fn payload_only_packet_roundtrip_matches_write() -> noprop::TestResult {
+    let saw_exact_fill = Cell::new(false);
+    let saw_singleton = Cell::new(false);
+    run(|ctx| {
+        let payload_len =
+            noprop::sample_with_boundaries(ctx, &[1usize, 184], noprop::Ratio::one_nth(4), |ctx| {
+                noprop::sample_usize_in(ctx, 1..=184)
+            });
+        saw_exact_fill.set(saw_exact_fill.get() || payload_len == 184);
+        saw_singleton.set(saw_singleton.get() || payload_len == 1);
+        let packet = TsPacket {
+            header: TsHeader {
+                transport_error_indicator: noprop::sample_bool(ctx),
+                transport_priority: noprop::sample_bool(ctx),
+                pid: sample_raw_pid(ctx),
+                transport_scrambling_control: noprop::sample_choice(
+                    ctx,
+                    &[
+                        TransportScramblingControl::NotScrambled,
+                        TransportScramblingControl::ScrambledWithEvenKey,
+                        TransportScramblingControl::ScrambledWithOddKey,
+                    ],
+                ),
+                continuity_counter: ContinuityCounter::from_u8(
+                    noprop::sample_usize_in(ctx, 0..=15) as u8,
+                )
+                .expect("counter stays within 0..=15"),
+            },
+            adaptation_field: None,
+            payload: Some(TsPayload::Raw(
+                Bytes::new(&noprop::sample_bytes_vec(ctx, payload_len))
+                    .expect("payload fits in Bytes::MAX_SIZE"),
+            )),
+        };
+        let mut writer = TsPacketWriter::new(Vec::new());
+        writer.write_ts_packet(&packet)?;
+        let bytes = writer.into_stream();
+        let mut reader = TsPacketReader::new(&bytes[..]);
+        let read_back = reader.read_ts_packet()?.expect("one packet written");
+        assert_eq!(read_back.header, packet.header, "header must round-trip");
+        assert_eq!(read_back.payload, packet.payload, "payload must round-trip");
+        if payload_len == 184 {
+            // An exact-fill payload leaves no room for a stuffing
+            // adaptation field, so the whole packet must round-trip.
+            assert_eq!(
+                read_back, packet,
+                "an exact-fill payload must round-trip without an adaptation field"
+            );
+        }
+        assert!(reader.read_ts_packet()?.is_none(), "no further packets");
+        Ok(())
+    })?;
+    assert!(
+        saw_exact_fill.get(),
+        "no case wrote an exact-fill (184-byte) payload"
+    );
+    assert!(saw_singleton.get(), "no case wrote a singleton payload");
+    Ok(())
+}
+
+#[test]
+fn null_packet_roundtrip_matches_write() -> noprop::TestResult {
+    run(|ctx| {
+        let packet = TsPacket {
+            header: TsHeader {
+                transport_error_indicator: noprop::sample_bool(ctx),
+                transport_priority: noprop::sample_bool(ctx),
+                pid: Pid::new(0x1FFF).expect("null packet pid"),
+                transport_scrambling_control: noprop::sample_choice(
+                    ctx,
+                    &[
+                        TransportScramblingControl::NotScrambled,
+                        TransportScramblingControl::ScrambledWithEvenKey,
+                        TransportScramblingControl::ScrambledWithOddKey,
+                    ],
+                ),
+                continuity_counter: ContinuityCounter::from_u8(
+                    noprop::sample_usize_in(ctx, 0..=15) as u8,
+                )
+                .expect("counter stays within 0..=15"),
+            },
+            adaptation_field: None,
+            payload: Some(TsPayload::Null(Null)),
+        };
+        let mut writer = TsPacketWriter::new(Vec::new());
+        writer.write_ts_packet(&packet)?;
+        let bytes = writer.into_stream();
+        let mut reader = TsPacketReader::new(&bytes[..]);
+        let read_back = reader.read_ts_packet()?.expect("one packet written");
+        assert_eq!(
+            read_back.header, packet.header,
+            "null header must round-trip"
+        );
+        assert_eq!(
+            read_back.payload, packet.payload,
+            "null payload must round-trip"
+        );
+        assert!(reader.read_ts_packet()?.is_none(), "no further packets");
+        Ok(())
+    })
 }
 
 // --- PSI round-trips ------------------------------------------------
@@ -816,11 +1019,13 @@ fn sample_pes(ctx: &mut TestCaseContext) -> Pes {
 fn pes_reassembly_matches_model() -> noprop::TestResult {
     let saw_split = Cell::new(false);
     let saw_empty = Cell::new(false);
+    let saw_unbounded = Cell::new(false);
     run(|ctx| {
         let (bytes, logical) = generate_reassembly_stream(ctx);
         for packet in &logical {
             saw_split.set(saw_split.get() || packet.n_ts_packets > 1);
             saw_empty.set(saw_empty.get() || packet.data.is_empty());
+            saw_unbounded.set(saw_unbounded.get() || packet.unbounded);
         }
         verify_reassembly(&bytes, &logical)?;
         Ok(())
@@ -830,6 +1035,76 @@ fn pes_reassembly_matches_model() -> noprop::TestResult {
         "no case split a PES packet across multiple TS packets"
     );
     assert!(saw_empty.get(), "no case generated an empty PES packet");
+    assert!(
+        saw_unbounded.get(),
+        "no case generated an unbounded (PES_packet_length = 0) PES packet"
+    );
+    Ok(())
+}
+
+#[test]
+fn pes_reassembly_multiple_pids_matches_model() -> noprop::TestResult {
+    let saw_split = Cell::new(false);
+    run(|ctx| {
+        let (bytes, logical) = generate_multipid_stream(ctx);
+        for packet in &logical {
+            saw_split.set(saw_split.get() || packet.n_ts_packets > 1);
+        }
+        // Audio and video stream ids are disjoint, so returned packets can
+        // be attributed to their PID; per-PID order must match generation
+        // order even though completions from the two PIDs interleave.
+        let (audio_logical, video_logical): (Vec<_>, Vec<_>) =
+            logical.iter().partition(|p| p.header.stream_id.is_audio());
+        let mut reader = PesPacketReader::new(TsPacketReader::new(&bytes[..]));
+        let mut audio_received = Vec::new();
+        let mut video_received = Vec::new();
+        while let Some(packet) = reader.read_pes_packet()? {
+            if packet.header.stream_id.is_audio() {
+                audio_received.push(packet);
+            } else {
+                video_received.push(packet);
+            }
+        }
+        assert_eq!(
+            audio_received.len(),
+            audio_logical.len(),
+            "audio stream: reader returned {} of {} generated PES packets",
+            audio_received.len(),
+            audio_logical.len(),
+        );
+        assert_eq!(
+            video_received.len(),
+            video_logical.len(),
+            "video stream: reader returned {} of {} generated PES packets",
+            video_received.len(),
+            video_logical.len(),
+        );
+        for (i, (expected, actual)) in audio_logical.iter().zip(&audio_received).enumerate() {
+            assert_eq!(
+                actual.header, expected.header,
+                "audio stream: PES header mismatch at packet {i}"
+            );
+            assert_eq!(
+                actual.data, expected.data,
+                "audio stream: PES data mismatch at packet {i}"
+            );
+        }
+        for (i, (expected, actual)) in video_logical.iter().zip(&video_received).enumerate() {
+            assert_eq!(
+                actual.header, expected.header,
+                "video stream: PES header mismatch at packet {i}"
+            );
+            assert_eq!(
+                actual.data, expected.data,
+                "video stream: PES data mismatch at packet {i}"
+            );
+        }
+        Ok(())
+    })?;
+    assert!(
+        saw_split.get(),
+        "no case split a PES packet across multiple TS packets"
+    );
     Ok(())
 }
 
@@ -941,6 +1216,133 @@ fn dts_without_pts_rejected() -> noprop::TestResult {
         assert!(
             writer.write_ts_packet(&packet).is_err(),
             "writing DTS without PTS must be rejected"
+        );
+        Ok(())
+    })
+}
+
+#[test]
+fn pes_continuation_without_start_rejected() -> noprop::TestResult {
+    run(|ctx| {
+        let pids = sample_pids(ctx, 2);
+        let pat_packet = packet_with(0, TsPayload::Pat(single_program_pat(pids[0])));
+        let pmt = sample_pmt_with_es(ctx, &[pids[1]]);
+        let pmt_packet = packet_with(pids[0].as_u16(), TsPayload::Pmt(pmt));
+        let continuation_len = noprop::sample_usize_in(ctx, 1..=184);
+        let continuation_bytes = noprop::sample_bytes_vec(ctx, continuation_len);
+        let continuation = packet_with(
+            pids[1].as_u16(),
+            TsPayload::PesContinuation(
+                Bytes::new(&continuation_bytes).expect("continuation fits in a TS payload"),
+            ),
+        );
+        let mut writer = TsPacketWriter::new(Vec::new());
+        writer.write_ts_packet(&pat_packet)?;
+        writer.write_ts_packet(&pmt_packet)?;
+        writer.write_ts_packet(&continuation)?;
+        let bytes = writer.into_stream();
+        let mut reader = PesPacketReader::new(TsPacketReader::new(&bytes[..]));
+        assert!(
+            reader.read_pes_packet().is_err(),
+            "a continuation without a pending PES start must be rejected"
+        );
+        Ok(())
+    })
+}
+
+#[test]
+fn pes_declared_length_exceeded_rejected() -> noprop::TestResult {
+    run(|ctx| {
+        let pids = sample_pids(ctx, 2);
+        let header = sample_pes_header(ctx);
+        let optional = 3
+            + 5 * usize::from(header.pts.is_some())
+            + 5 * usize::from(header.dts.is_some())
+            + 6 * usize::from(header.escr.is_some());
+        let declared_data = noprop::sample_usize_in(ctx, 0..=10);
+        // The start chunk already carries more data than the declared
+        // `PES_packet_length` allows.
+        let start_chunk =
+            noprop::sample_usize_in(ctx, declared_data + 1..=184 - pes_header_bytes(&header));
+        let start_bytes = noprop::sample_bytes_vec(ctx, start_chunk);
+        let pat_packet = packet_with(0, TsPayload::Pat(single_program_pat(pids[0])));
+        let pmt = sample_pmt_with_es(ctx, &[pids[1]]);
+        let pmt_packet = packet_with(pids[0].as_u16(), TsPayload::Pmt(pmt));
+        let start_packet = packet_with(
+            pids[1].as_u16(),
+            TsPayload::PesStart(Pes {
+                header,
+                pes_packet_len: (optional + declared_data) as u16,
+                data: Bytes::new(&start_bytes).expect("start chunk fits in a TS payload"),
+            }),
+        );
+        let continuation_len = noprop::sample_usize_in(ctx, 1..=184);
+        let continuation_bytes = noprop::sample_bytes_vec(ctx, continuation_len);
+        let continuation = packet_with(
+            pids[1].as_u16(),
+            TsPayload::PesContinuation(
+                Bytes::new(&continuation_bytes).expect("continuation fits in a TS payload"),
+            ),
+        );
+        let mut writer = TsPacketWriter::new(Vec::new());
+        writer.write_ts_packet(&pat_packet)?;
+        writer.write_ts_packet(&pmt_packet)?;
+        writer.write_ts_packet(&start_packet)?;
+        writer.write_ts_packet(&continuation)?;
+        let bytes = writer.into_stream();
+        let mut reader = PesPacketReader::new(TsPacketReader::new(&bytes[..]));
+        assert!(
+            reader.read_pes_packet().is_err(),
+            "data exceeding the declared PES_packet_length must be rejected"
+        );
+        Ok(())
+    })
+}
+
+#[test]
+fn pes_dts_without_pts_read_rejected() -> noprop::TestResult {
+    run(|ctx| {
+        let pids = sample_pids(ctx, 2);
+        let mut writer = TsPacketWriter::new(Vec::new());
+        writer
+            .write_ts_packet(&packet_with(0, TsPayload::Pat(single_program_pat(pids[0]))))
+            .expect("PAT write");
+        let pmt = sample_pmt_with_es(ctx, &[pids[1]]);
+        writer
+            .write_ts_packet(&packet_with(pids[0].as_u16(), TsPayload::Pmt(pmt)))
+            .expect("PMT write");
+        // The writer rejects DTS without PTS, so the invalid flag
+        // combination is crafted by hand: a PES start packet whose second
+        // flags byte sets the DTS flag and clears the PTS flag.
+        let stream_id = if noprop::sample_bool(ctx) {
+            StreamId::new(noprop::sample_usize_in(
+                ctx,
+                usize::from(StreamId::AUDIO_MIN)..=usize::from(StreamId::AUDIO_MAX),
+            ) as u8)
+        } else {
+            StreamId::new(noprop::sample_usize_in(
+                ctx,
+                usize::from(StreamId::VIDEO_MIN)..=usize::from(StreamId::VIDEO_MAX),
+            ) as u8)
+        };
+        let mut bytes = Vec::new();
+        bytes.push(0x47);
+        bytes.extend((0b0100_0000_0000_0000 | pids[1].as_u16()).to_be_bytes());
+        bytes.push((0b00 << 6) | (0b01 << 4) | noprop::sample_usize_in(ctx, 0..=15) as u8);
+        bytes.extend(&[0x00, 0x00, 0x01]); // packet start code prefix
+        bytes.push(stream_id.as_u8());
+        bytes.extend(&[0x00, 0x00]); // PES_packet_length = 0 (unbounded)
+        bytes.push(0x80); // marker bits + not scrambled
+        bytes.push(0b0100_0000); // DTS flag set, PTS flag clear
+        while bytes.len() < 188 {
+            bytes.push(0xFF);
+        }
+        let mut stream = writer.into_stream();
+        stream.extend(bytes);
+        let mut reader = PesPacketReader::new(TsPacketReader::new(&stream[..]));
+        assert!(
+            reader.read_pes_packet().is_err(),
+            "DTS without PTS must be rejected on read"
         );
         Ok(())
     })
