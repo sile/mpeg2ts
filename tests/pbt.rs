@@ -1308,7 +1308,7 @@ fn pes_dts_without_pts_read_rejected() -> noprop::TestResult {
         bytes.push(0x47);
         bytes.extend((0b0100_0000_0000_0000 | pids[1].as_u16()).to_be_bytes());
         // transport_scrambling_control=00, adaptation_field_control=01, continuity_counter=0..=15.
-        #[allow(clippy::identity_op)]
+        #[expect(clippy::identity_op)]
         bytes.push((0b00 << 6) | (0b01 << 4) | noprop::sample_usize_in(ctx, 0..=15) as u8);
         bytes.extend(&[0x00, 0x00, 0x01]); // packet start code prefix
         bytes.push(stream_id.as_u8());
