@@ -104,14 +104,14 @@ fn sample_timestamp(ctx: &mut TestCaseContext) -> Timestamp {
         ctx,
         &[0u64, 1, Timestamp::MAX],
         noprop::Ratio::one_nth(4),
-        |ctx| noprop::sample_u64(ctx) & ((1 << 33) - 1),
+        |ctx| noprop::sample_u64_in(ctx, 0..=Timestamp::MAX),
     );
-    Timestamp::new(n).expect("masked draw stays within Timestamp::MAX")
+    Timestamp::new(n).expect("draw stays within Timestamp::MAX")
 }
 
 fn sample_clock_reference(ctx: &mut TestCaseContext) -> ClockReference {
-    let base = noprop::sample_u64(ctx) & ((1 << 33) - 1);
-    let extension = noprop::sample_u64(ctx) & 0b1_1111_1111;
+    let base = noprop::sample_u64_in(ctx, 0..=((1 << 33) - 1));
+    let extension = noprop::sample_u64_in(ctx, 0..=0b1_1111_1111);
     ClockReference::new(base * 300 + extension)
         .expect("base and extension stay within ClockReference::MAX")
 }
