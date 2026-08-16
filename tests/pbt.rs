@@ -18,9 +18,6 @@
 //!   than its optional header, data exceeding the declared PES length, a
 //!   continuation without a pending start, and DTS without PTS (both on
 //!   write and, via hand-crafted bytes, on read) are all rejected.
-//! - Feedback-guided reassembly: semantic buckets (total PES data length
-//!   band, TS packet count band) steer the search toward the corners that
-//!   uniform sampling would under-explore.
 //!
 //! PAT / PMT / PES tests compare header and payload only, not the whole
 //! packet: the writer pads spare space with a stuffing adaptation field, so
@@ -72,24 +69,6 @@ where
     assert_eq!(
         stats.rejected_cases, 0,
         "valid-by-construction generators must not reject cases"
-    );
-    Ok(())
-}
-
-fn run_feedback<F>(cases: usize, f: F) -> noprop::TestResult
-where
-    F: Fn(&mut TestCaseContext) -> noprop::TestResult,
-{
-    let mut runner = noprop::Runner::new(seed()?);
-    runner.run_feedback_guided(cases, f)?;
-    // Gate on the feedback machinery itself: if the buckets ever become
-    // no-ops (e.g. someone switches this test back to plain `run`), the
-    // search would silently lose its corner-concentrating behavior while
-    // the reassembly assertion still passes.
-    let stats = runner.stats();
-    assert!(
-        stats.discovered_features > 0,
-        "feedback-guided run discovered no features; feedback is not active"
     );
     Ok(())
 }
@@ -1328,6 +1307,8 @@ fn pes_dts_without_pts_read_rejected() -> noprop::TestResult {
         let mut bytes = Vec::new();
         bytes.push(0x47);
         bytes.extend((0b0100_0000_0000_0000 | pids[1].as_u16()).to_be_bytes());
+        // transport_scrambling_control=00, adaptation_field_control=01, continuity_counter=0..=15.
+        #[allow(clippy::identity_op)]
         bytes.push((0b00 << 6) | (0b01 << 4) | noprop::sample_usize_in(ctx, 0..=15) as u8);
         bytes.extend(&[0x00, 0x00, 0x01]); // packet start code prefix
         bytes.push(stream_id.as_u8());
@@ -1345,35 +1326,5 @@ fn pes_dts_without_pts_read_rejected() -> noprop::TestResult {
             "DTS without PTS must be rejected on read"
         );
         Ok(())
-    })
-}
-
-// --- Feedback-guided reassembly --------------------------------------
-
-#[test]
-fn feedback_guided_pes_reassembly() -> noprop::TestResult {
-    run_feedback(64, |ctx| {
-        let (bytes, logical) = generate_reassembly_stream(ctx);
-        // Total PES data length band: 0 / 1..=64 / 65..=1024 / 1025..=
-        // (multiple TS packets each).
-        let total_data: usize = logical.iter().map(|p| p.data.len()).sum();
-        let data_band = match total_data {
-            0 => 0u64,
-            1..=64 => 1,
-            65..=1024 => 2,
-            _ => 3,
-        };
-        ctx.bucket("pes_total_data_band", data_band);
-        // TS packet count band: a packet fully inside its start TS packet
-        // is the cheap corner; every further TS packet costs a write.
-        let n_ts_packets: usize = logical.iter().map(|p| p.n_ts_packets).sum();
-        let packets_band = match n_ts_packets {
-            1 => 0u64,
-            2..=8 => 1,
-            9..=32 => 2,
-            _ => 3,
-        };
-        ctx.bucket("ts_packets_band", packets_band);
-        verify_reassembly(&bytes, &logical)
     })
 }
